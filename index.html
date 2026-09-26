@@ -286,64 +286,255 @@ const NAV_CASHIER = [
 // =====================================================================
 // AUTH
 // =====================================================================
-async function doLogin(){
-  const email = document.getElementById('login-email').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  document.getElementById('login-error').textContent = '';
-  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
-  if(error){ document.getElementById('login-error').textContent = error.message; return; }
-  await afterLogin();
-}
-async function doLogout(){ await sb.auth.signOut(); location.reload(); }
+// =====================================================================
+// AUTH
+// =====================================================================
 
-async function afterLogin(){
-  const { data:{ user } } = await sb.auth.getUser();
-  if(!user){ return; }
-  const { data:profile } = await sb.from('profiles').select('*').eq('id', user.id).single();
+async function doLogin() {
+  const emailEl = document.getElementById('login-email');
+  const passEl = document.getElementById('login-pass');
+  const errorEl = document.getElementById('login-error');
+
+  const email = emailEl.value.trim();
+  const password = passEl.value;
+
+  errorEl.textContent = '';
+
+  if (!email || !password) {
+    errorEl.textContent = 'Enter your email and password.';
+    return;
+  }
+
+  try {
+    errorEl.textContent = 'Logging in...';
+
+    const { data, error } = await sb.auth.signInWithPassword({
+      email: email,
+      password: password
+    });
+
+    if (error) {
+      console.error('Supabase login error:', error);
+      errorEl.textContent = error.message;
+      return;
+    }
+
+    if (!data || !data.user) {
+      errorEl.textContent = 'Login failed. No user session was created.';
+      return;
+    }
+
+    await loadLoggedInUser(data.user);
+
+  } catch (err) {
+    console.error('Login exception:', err);
+    errorEl.textContent =
+      err.message || 'Unable to connect to Supabase.';
+  }
+}
+
+
+async function loadLoggedInUser(user) {
+
+  const errorEl = document.getElementById('login-error');
+
+  // Get the POS profile
+  const {
+    data: profile,
+    error: profileError
+  } = await sb
+    .from('profiles')
+    .select('id, name, phone, email, role, active')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (profileError) {
+    console.error('Profile query error:', profileError);
+
+    await sb.auth.signOut();
+
+    errorEl.textContent =
+      'Could not load your POS profile: ' + profileError.message;
+
+    return;
+  }
+
+  // User authenticated but profile does not exist
+  if (!profile) {
+
+    console.error('No profile found for:', user.id);
+
+    await sb.auth.signOut();
+
+    errorEl.innerHTML =
+      'Login succeeded, but no POS profile exists for this account.<br>' +
+      '<small>Create a profile for this user in Supabase.</small>';
+
+    return;
+  }
+
+  // Account disabled
+  if (profile.active !== true) {
+
+    await sb.auth.signOut();
+
+    errorEl.textContent =
+      'Your POS account is inactive. Contact the owner.';
+
+    return;
+  }
+
+  // Store logged-in user
   me = profile;
-  if(!me || !me.active){ document.getElementById('login-error').textContent='Account inactive. Contact owner.'; return; }
-  document.getElementById('login-screen').style.display='none';
-  document.getElementById('app').style.display='block';
-  document.getElementById('hdr-name').textContent = me.name + ' · ' + me.role;
+
+  window.currentUser = profile;
+
+  // Hide login
+  document.getElementById('login-screen').style.display = 'none';
+
+  // Show POS
+  document.getElementById('app').style.display = 'block';
+
+  // Header
+  document.getElementById('hdr-name').textContent =
+    (profile.name || profile.email || 'User') +
+    ' · ' +
+    (profile.role || 'cashier');
+
+  // Build navigation
   buildNav();
-  document.getElementById('add-product-btn').style.display = me.role==='owner' ? 'block':'none';
-  document.getElementById('close-day-btn').style.display = me.role==='owner' ? 'block':'none';
-  document.getElementById('open-day-btn').style.display = me.role==='owner' ? 'block':'none';
-  await loadProducts();
-  await checkBusinessDay();
-  renderDashboard();
+
+  // Owner-only controls
+  const addProductBtn =
+    document.getElementById('add-product-btn');
+
+  const closeDayBtn =
+    document.getElementById('close-day-btn');
+
+  const openDayBtn =
+    document.getElementById('open-day-btn');
+
+  if (addProductBtn) {
+    addProductBtn.style.display =
+      profile.role === 'owner' ? 'block' : 'none';
+  }
+
+  if (closeDayBtn) {
+    closeDayBtn.style.display =
+      profile.role === 'owner' ? 'block' : 'none';
+  }
+
+  if (openDayBtn) {
+    openDayBtn.style.display =
+      profile.role === 'owner' ? 'block' : 'none';
+  }
+
+  try {
+
+    await loadProducts();
+
+    await checkBusinessDay();
+
+    await renderDashboard();
+
+  } catch (err) {
+
+    console.error('POS startup error:', err);
+
+    toast(
+      'Logged in, but some POS data could not be loaded.'
+    );
+  }
+
+  errorEl.textContent = '';
 }
 
-function buildNav(){
-  const items = me.role==='owner' ? NAV_OWNER : NAV_CASHIER;
-  const nav = document.getElementById('main-nav');
-  nav.innerHTML = items.map((it,i)=>`<button data-v="${it[0]}" class="${i===0?'active':''}">${it[1]}</button>`).join('');
-  nav.querySelectorAll('button').forEach(b=>{
-    b.onclick=()=>{
-      nav.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active');
-      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-      document.getElementById('v-'+b.dataset.v).classList.add('active');
-      routeView(b.dataset.v);
-    };
-  });
-}
-function routeView(v){
-  if(v==='dash') renderDashboard();
-  if(v==='products') renderProducts();
-  if(v==='inventory') renderInventory();
-  if(v==='receive') renderReceiveScreen();
-  if(v==='dailybook') { document.getElementById('db-date').value = todayStr(); renderDailyBook(); }
-  if(v==='expenses') renderExpenses();
-  if(v==='till') renderTill();
-  if(v==='history') renderHistory();
-  if(v==='reports') renderReport('today');
-  if(v==='settings') renderSettings();
+
+async function doLogout() {
+
+  try {
+
+    const { error } = await sb.auth.signOut();
+
+    if (error) {
+      console.error('Logout error:', error);
+      toast(error.message);
+      return;
+    }
+
+    me = null;
+    window.currentUser = null;
+    cart = [];
+
+    document.getElementById('app').style.display = 'none';
+
+    document.getElementById('login-screen').style.display = 'flex';
+
+    document.getElementById('login-email').value = '';
+
+    document.getElementById('login-pass').value = '';
+
+    document.getElementById('login-error').textContent = '';
+
+  } catch (err) {
+
+    console.error('Logout exception:', err);
+
+    toast('Unable to log out.');
+
+  }
 }
 
-sb.auth.onAuthStateChange((event, session)=>{ if(event==='SIGNED_IN' && !me) afterLogin(); });
-(async ()=>{ const {data:{session}} = await sb.auth.getSession(); if(session) afterLogin(); })();
 
+// ================================================================
+// RESTORE EXISTING SESSION
+// ================================================================
+
+sb.auth.onAuthStateChange(async (event, session) => {
+
+  if (event === 'SIGNED_IN' && session && !me) {
+
+    await loadLoggedInUser(session.user);
+
+  }
+
+});
+
+
+// ================================================================
+// CHECK SESSION WHEN PAGE OPENS
+// ================================================================
+
+(async function initialiseAuthentication() {
+
+  try {
+
+    const {
+      data: { session },
+      error
+    } = await sb.auth.getSession();
+
+    if (error) {
+      console.error('Session error:', error);
+      return;
+    }
+
+    if (session && session.user) {
+
+      await loadLoggedInUser(session.user);
+
+    }
+
+  } catch (err) {
+
+    console.error(
+      'Authentication initialisation error:',
+      err
+    );
+
+  }
+
+})();
 // =====================================================================
 // BUSINESS DAY
 // =====================================================================
