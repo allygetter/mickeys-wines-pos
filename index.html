@@ -10,22 +10,14 @@
      Project Settings > API in your Supabase dashboard
 ============================================================= -->
 <script>
-  // ============================================================
-  // SUPABASE CONFIGURATION
-  // Supabase Dashboard → Project Settings → API
-  //
-  // IMPORTANT:
-  // - Use your Project URL.
-  // - Use the publishable/anon key ONLY.
-  // - NEVER put the service_role/secret key in this HTML.
-  // ============================================================
-  const SUPABASE_URL = "PASTE_YOUR_SUPABASE_PROJECT_URL_HERE";
-  const SUPABASE_ANON_KEY = "PASTE_YOUR_SUPABASE_ANON_KEY_HERE";
+  const SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL";
+  const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 
   function supabaseConfigReady(){
-    return SUPABASE_URL.startsWith("https://")
-      && !SUPABASE_URL.includes("PASTE_YOUR")
-      && !SUPABASE_ANON_KEY.includes("PASTE_YOUR");
+    return /^https:\/\/[^\s]+$/.test(SUPABASE_URL)
+      && !SUPABASE_URL.includes("YOUR_SUPABASE")
+      && SUPABASE_ANON_KEY.length > 20
+      && !SUPABASE_ANON_KEY.includes("YOUR_SUPABASE");
   }
 </script>
 
@@ -111,6 +103,7 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
     <input id="login-pass" type="password" placeholder="Password" autocomplete="current-password">
     <button class="btn" onclick="doLogin()">Log In</button>
     <div id="login-error" class="hint" style="color:var(--bad);"></div>
+    <div class="hint">If login succeeds but the app does not open, the message above will identify whether the Auth user or profiles row is the problem.</div>
     <div class="hint">New staff accounts are created in the Supabase dashboard by the owner (see README).</div>
   </div>
 </div>
@@ -276,24 +269,22 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
 // SETUP
 // =====================================================================
 let sb = null;
-let me = null;         // profiles row for logged-in user
-let products = [];
-let cart = [];
-let payMethod = 'Cash';
-let todayBusinessDay = null; // business_days row for today, or null if not open
-let catFilter = 'All';
 let authBusy = false;
 
 if(supabaseConfigReady()){
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 } else {
   document.addEventListener('DOMContentLoaded', ()=>{
-    const box = document.getElementById('login-error');
-    if(box){
-      box.textContent = 'Supabase is not configured. Replace the two PASTE_YOUR... values near the top of this file with your Supabase Project URL and publishable/anon key.';
-    }
+    const box=document.getElementById('login-error');
+    if(box) box.textContent='Supabase is not configured. Enter your Project URL and publishable/anon key in the configuration section at the top of this file.';
   });
 }
+let me = null;         // profiles row for logged-in user
+let products = [];
+let cart = [];
+let payMethod = 'Cash';
+let todayBusinessDay = null; // business_days row for today, or null if not open
+let catFilter = 'All';
 
 function money(n){ return 'KSh ' + Math.round(n||0).toLocaleString(); }
 function todayStr(){ return new Date().toISOString().slice(0,10); }
@@ -314,148 +305,90 @@ const NAV_CASHIER = [
 // AUTH
 // =====================================================================
 async function doLogin(){
-  if(!sb){
-    document.getElementById('login-error').textContent =
-      'Supabase is not configured. Check SUPABASE_URL and SUPABASE_ANON_KEY at the top of this file.';
-    return;
-  }
-
+  const box=document.getElementById('login-error');
+  box.textContent='';
+  if(!sb){ box.textContent='Supabase is not configured. Check the two configuration values at the top of this file.'; return; }
   if(authBusy) return;
-  authBusy = true;
-
-  const email = document.getElementById('login-email').value.trim();
-  const pass = document.getElementById('login-pass').value;
-  const errorBox = document.getElementById('login-error');
-  errorBox.textContent = '';
-
-  if(!email || !pass){
-    errorBox.textContent = 'Enter your email and password.';
-    authBusy = false;
-    return;
-  }
-
-  const { data, error } = await sb.auth.signInWithPassword({
-    email,
-    password: pass
-  });
-
-  if(error){
-    errorBox.textContent = 'Login failed: ' + error.message;
-    authBusy = false;
-    return;
-  }
-
-  const result = await afterLogin();
-  authBusy = false;
-
-  if(result?.error){
-    await sb.auth.signOut();
-  }
+  authBusy=true;
+  try{
+    const email=document.getElementById('login-email').value.trim();
+    const pass=document.getElementById('login-pass').value;
+    if(!email || !pass){ box.textContent='Enter your email and password.'; return; }
+    const {error}=await sb.auth.signInWithPassword({email,password:pass});
+    if(error){ box.textContent='Login failed: '+error.message; return; }
+    const result=await afterLogin();
+    if(result?.error) await sb.auth.signOut();
+  }catch(e){ box.textContent='Login error: '+(e?.message||e); }
+  finally{ authBusy=false; }
 }
 
-async function doLogout(){
-  if(sb) await sb.auth.signOut();
-  location.reload();
+async function currentUserId(){
+  const {data:{user},error}=await sb.auth.getUser();
+  if(error || !user) throw new Error(error?.message || 'No authenticated user.');
+  return user.id;
 }
+
+async function doLogout(){ if(sb) await sb.auth.signOut(); location.reload(); }
 
 async function afterLogin(){
   if(!sb) return {error:'Supabase is not configured.'};
-
-  const { data:{ user }, error:userError } = await sb.auth.getUser();
-
+  const {data:{user},error:userError}=await sb.auth.getUser();
   if(userError || !user){
-    const msg = userError?.message || 'No authenticated user was found.';
-    document.getElementById('login-error').textContent = 'Session error: ' + msg;
+    const msg=userError?.message || 'No authenticated user was found.';
+    document.getElementById('login-error').textContent='Session error: '+msg;
     return {error:msg};
   }
 
-  const { data:profile, error:profileError } = await sb
-    .from('profiles')
-    .select('*')
-    .eq('id', user.id)
-    .maybeSingle();
-
+  const {data:profile,error:profileError}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
   if(profileError){
-    const msg = 'Profile lookup failed: ' + profileError.message +
-      ' (code ' + (profileError.code || 'unknown') + ')';
-    document.getElementById('login-error').textContent = msg;
+    const msg='Profile lookup failed ('+(profileError.code||'unknown')+'): '+profileError.message;
+    document.getElementById('login-error').textContent=msg;
     return {error:msg};
   }
-
   if(!profile){
-    const msg = 'Login succeeded, but no profiles row exists for this user. ' +
-      'Run the profile trigger SQL or create a profiles row with id = ' + user.id + '.';
-    document.getElementById('login-error').textContent = msg;
+    const msg='No profile exists for this login. The profiles row must use the same UUID as the Supabase Auth user.';
+    document.getElementById('login-error').textContent=msg;
+    return {error:msg};
+  }
+  if(!profile.active){
+    const msg='Account is inactive. Ask an owner to activate it.';
+    document.getElementById('login-error').textContent=msg;
+    return {error:msg};
+  }
+  if(!['owner','cashier'].includes(profile.role)){
+    const msg='Invalid profile role. Set the role to owner or cashier.';
+    document.getElementById('login-error').textContent=msg;
     return {error:msg};
   }
 
-  me = profile;
-
-  if(!me.active){
-    const msg = 'This POS account is inactive. Contact the owner.';
-    document.getElementById('login-error').textContent = msg;
-    return {error:msg};
-  }
-
-  if(!['owner','cashier'].includes(me.role)){
-    const msg = 'This profile has an invalid POS role. Set it to owner or cashier.';
-    document.getElementById('login-error').textContent = msg;
-    return {error:msg};
-  }
-
+  me=profile;
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
-  document.getElementById('hdr-name').textContent = me.name + ' · ' + me.role;
+  document.getElementById('hdr-name').textContent=(me.name||user.email)+' · '+me.role;
   buildNav();
-  document.getElementById('add-product-btn').style.display = me.role==='owner' ? 'block':'none';
-  document.getElementById('close-day-btn').style.display = me.role==='owner' ? 'block':'none';
-  document.getElementById('open-day-btn').style.display = me.role==='owner' ? 'block':'none';
-
+  document.getElementById('add-product-btn').style.display=me.role==='owner'?'block':'none';
+  document.getElementById('close-day-btn').style.display=me.role==='owner'?'block':'none';
+  document.getElementById('open-day-btn').style.display=me.role==='owner'?'block':'none';
   await loadProducts();
   await checkBusinessDay();
-  renderDashboard();
-
+  await renderDashboard();
   return {ok:true};
 }
 
 function buildNav(){
-  const items = me.role==='owner' ? NAV_OWNER : NAV_CASHIER;
-  const nav = document.getElementById('main-nav');
-  nav.innerHTML = items.map((it,i)=>`<button data-v="${it[0]}" class="${i===0?'active':''}">${it[1]}</button>`).join('');
-  nav.querySelectorAll('button').forEach(b=>{
-    b.onclick=()=>{
-      nav.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
-      b.classList.add('active');
-      document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-      document.getElementById('v-'+b.dataset.v).classList.add('active');
-      routeView(b.dataset.v);
-    };
-  });
+  const items=me.role==='owner'?NAV_OWNER:NAV_CASHIER;
+  const nav=document.getElementById('main-nav');
+  nav.innerHTML=items.map((it,i)=>`<button data-v="${it[0]}" class="${i===0?'active':''}">${it[1]}</button>`).join('');
+  nav.querySelectorAll('button').forEach(b=>{ b.onclick=()=>{ nav.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById('v-'+b.dataset.v).classList.add('active'); routeView(b.dataset.v); }; });
 }
 function routeView(v){
-  if(v==='dash') renderDashboard();
-  if(v==='products') renderProducts();
-  if(v==='inventory') renderInventory();
-  if(v==='receive') renderReceiveScreen();
-  if(v==='dailybook') { document.getElementById('db-date').value = todayStr(); renderDailyBook(); }
-  if(v==='expenses') renderExpenses();
-  if(v==='till') renderTill();
-  if(v==='history') renderHistory();
-  if(v==='reports') renderReport('today');
-  if(v==='settings') renderSettings();
+  if(v==='dash') renderDashboard(); if(v==='products') renderProducts(); if(v==='inventory') renderInventory(); if(v==='receive') renderReceiveScreen();
+  if(v==='dailybook'){ document.getElementById('db-date').value=todayStr(); renderDailyBook(); } if(v==='expenses') renderExpenses(); if(v==='till') renderTill(); if(v==='history') renderHistory(); if(v==='reports') renderReport('today'); if(v==='settings') renderSettings();
 }
 
 if(sb){
-  sb.auth.onAuthStateChange((event, session)=>{
-    if(event==='SIGNED_IN' && session && !me && !authBusy){
-      setTimeout(()=>afterLogin(), 0);
-    }
-  });
-
-  (async ()=>{
-    const {data:{session}} = await sb.auth.getSession();
-    if(session) await afterLogin();
-  })();
+  sb.auth.onAuthStateChange((event,session)=>{ if(event==='SIGNED_IN' && session && !me && !authBusy) setTimeout(()=>afterLogin(),0); });
+  (async()=>{ const {data:{session}}=await sb.auth.getSession(); if(session && !me) await afterLogin(); })();
 }
 
 // =====================================================================
@@ -479,7 +412,7 @@ async function checkBusinessDay(){
 }
 async function openDay(){
   const cash = parseFloat(document.getElementById('open-cash').value)||0;
-  const { error } = await sb.rpc('open_business_day', { p_business_date: todayStr(), p_opening_cash: cash, p_user_id: me.id });
+  const { error } = await sb.rpc('open_business_day', { p_business_date: todayStr(), p_opening_cash: cash, p_user_id: await currentUserId() });
   if(error){ toast(error.message); return; }
   toast('Business day opened');
   await checkBusinessDay();
@@ -488,8 +421,8 @@ async function openDay(){
 async function closeDay(){
   const actual = parseFloat(document.getElementById('till-actual').value);
   if(isNaN(actual)){ toast('Enter actual cash counted first'); return; }
-  if(!confirm('Close today\\'s business day? This cannot be undone easily.')) return;
-  const { error } = await sb.rpc('close_business_day', { p_business_date: todayStr(), p_actual_cash: actual, p_user_id: me.id });
+  if(!confirm('Close today\'s business day? This cannot be undone easily.')) return;
+  const { error } = await sb.rpc('close_business_day', { p_business_date: todayStr(), p_actual_cash: actual, p_user_id: await currentUserId() });
   if(error){ toast(error.message); return; }
   toast('Business day closed');
   await checkBusinessDay();
@@ -622,7 +555,7 @@ async function completeSale(){
   const txn = uid6();
   const items = cart.map(c=>({ product_id:c.id, product_name:c.name, quantity:c.qty, selling_price:c.price, buying_price:c.buying }));
   const { error } = await sb.rpc('complete_sale', {
-    p_txn: txn, p_business_date: todayStr(), p_cashier_id: me.id,
+    p_txn: txn, p_business_date: todayStr(), p_cashier_id: await currentUserId(),
     p_subtotal: subtotal, p_total: subtotal, p_paid: paid, p_change: Math.max(0,paid-subtotal),
     p_payment: payMethod, p_items: items
   });
@@ -811,7 +744,7 @@ function viewSale(id){
 async function voidThisSale(id){
   const reason = prompt('Reason for voiding this sale?');
   if(reason===null) return;
-  const { error } = await sb.rpc('void_sale', { p_sale_id: id, p_reason: reason, p_user_id: me.id });
+  const { error } = await sb.rpc('void_sale', { p_sale_id: id, p_reason: reason, p_user_id: await currentUserId() });
   if(error){ toast(error.message); return; }
   closeModal(); toast('Sale voided'); await loadProducts(); renderHistory();
 }
@@ -900,9 +833,12 @@ async function saveSettings(){
   toast('Settings saved');
 }
 async function updateRole(id, role){
+  if(me?.role!=='owner'){ toast('Owner access required'); return; }
+  if(id===me.id && role!=='owner'){ toast('Do not remove your own owner role.'); await renderSettings(); return; }
   const { error } = await sb.from('profiles').update({role}).eq('id', id);
-  if(error){ toast(error.message); return; }
+  if(error){ toast('Role update failed: '+error.message); await renderSettings(); return; }
   toast('Role updated');
+  await renderSettings();
 }
 
 // =====================================================================
