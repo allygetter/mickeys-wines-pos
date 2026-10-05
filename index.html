@@ -5,13 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Mickeys Wines & Spirits POS</title>
 
-<!-- ============================================================
-     1) PLUG IN YOUR SUPABASE PROJECT DETAILS HERE
-     Project Settings > API in your Supabase dashboard
-============================================================= -->
 <script>
   const SUPABASE_URL = "https://qnoekttidazffpzvucoa.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFub2VrdHRpZGF6ZmZwenZ1Y29hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTA2OTAsImV4cCI6MjEwNTkyNjY5MH0.ACcPRgSbHk1okQMBqBTuOu-GMzrrWYp7rxVtD2kJaBs";
+  const SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 
   function supabaseConfigReady(){
     return /^https:\/\/[^\s]+$/.test(SUPABASE_URL)
@@ -24,7 +20,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
 <style>
-/* ===== UBER EATS THEME: black / white / signature green ===== */
 :root{
   --bg:#000000; --panel:#141414; --panel2:#1f1f1f; --border:#2b2b2b;
   --text:#ffffff; --muted:#9a9a9a;
@@ -35,6 +30,7 @@
 *{box-sizing:border-box;}
 html,body{height:100%;margin:0;}
 body{background:var(--bg);color:var(--text);font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;}
+body.is-cashier .owner-only{display:none !important;}
 header{position:sticky;top:0;padding:calc(14px + env(safe-area-inset-top,0px)) 16px 12px;background:var(--panel);border-bottom:1px solid var(--border);z-index:10;display:flex;justify-content:space-between;align-items:center;}
 header h1{margin:0;font-size:16px;letter-spacing:.3px;}
 header h1 span{color:var(--accent);}
@@ -73,8 +69,6 @@ button.btn.small{width:auto;padding:8px 12px;font-size:13px;}
 .pay-methods button.sel{background:var(--accent);color:var(--accent-text);border-color:var(--accent);font-weight:800;}
 .badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:6px;}
 .badge-low{background:var(--bad);color:#fff;}
-.badge-open{background:var(--accent);color:var(--accent-text);}
-.badge-closed{background:var(--panel2);color:var(--muted);border:1px solid var(--border);}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.7);display:none;align-items:flex-end;z-index:50;}
 .modal-bg.open{display:flex;}
 .modal{background:var(--panel);width:100%;border-radius:16px 16px 0 0;padding:18px 16px calc(24px + env(safe-area-inset-bottom,0px));max-height:88vh;overflow-y:auto;}
@@ -86,7 +80,6 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
 .pill-row{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;}
 .pill-row button{flex:0 0 auto;padding:7px 12px;border-radius:16px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:12px;}
 .pill-row button.sel{background:var(--accent);color:var(--accent-text);border-color:var(--accent);font-weight:700;}
-.center{text-align:center;}
 .close-stock-input{width:92px;margin:0;padding:8px;}
 .login-wrap{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px;}
 .login-box{width:100%;max-width:360px;}
@@ -104,8 +97,6 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
     <input id="login-pass" type="password" placeholder="Password" autocomplete="current-password">
     <button class="btn" onclick="doLogin()">Log In</button>
     <div id="login-error" class="hint" style="color:var(--bad);"></div>
-    <div class="hint">If login succeeds but the app does not open, the message above will identify whether the Auth user or profiles row is the problem.</div>
-    <div class="hint">New staff accounts are created in the Supabase dashboard by the owner (see README).</div>
   </div>
 </div>
 
@@ -121,30 +112,25 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
 <main>
 
 <div class="view active" id="v-dash">
-  <div id="day-status-banner" class="card" style="margin-bottom:12px;"></div>
+  <h2 class="section" id="d-title" style="margin-top:4px;">Yesterday</h2>
   <div class="grid">
-    <div class="card"><div class="label">Today's Sales</div><div class="value" id="d-sales">KSh 0</div></div>
-    <div class="card"><div class="label">Gross Profit</div><div class="value good" id="d-profit">KSh 0</div></div>
-    <div class="card"><div class="label">COGS</div><div class="value" id="d-cogs">KSh 0</div></div>
+    <div class="card"><div class="label">Yesterday's Sales</div><div class="value" id="d-sales">KSh 0</div></div>
     <div class="card"><div class="label">Expenses</div><div class="value" id="d-exp">KSh 0</div></div>
-    <div class="card"><div class="label">Net Profit</div><div class="value good" id="d-net">KSh 0</div></div>
-    <div class="card"><div class="label">Transactions</div><div class="value" id="d-tx">0</div></div>
-    <div class="card"><div class="label">Low Stock</div><div class="value bad" id="d-low">0</div></div>
-    <div class="card"><div class="label">Stock Value</div><div class="value" id="d-stockval">KSh 0</div></div>
+    <div class="card owner-only"><div class="label">Gross Profit</div><div class="value good" id="d-profit">KSh 0</div></div>
+    <div class="card owner-only"><div class="label">COGS</div><div class="value" id="d-cogs">KSh 0</div></div>
+    <div class="card owner-only"><div class="label">Net Profit</div><div class="value good" id="d-net">KSh 0</div></div>
+    <div class="card owner-only"><div class="label">Low Stock</div><div class="value bad" id="d-low">0</div></div>
+    <div class="card owner-only"><div class="label">Stock Value</div><div class="value" id="d-stockval">KSh 0</div></div>
   </div>
-  <h2 class="section">Recent Sales</h2>
-  <div class="card" id="d-recent"></div>
-  <h2 class="section">Top Products Today</h2>
-  <div class="card" id="d-top"></div>
-  <h2 class="section">Low Stock Products</h2>
-  <div class="card" id="d-lowlist"></div>
+  <div class="owner-only">
+    <h2 class="section">Top Products Yesterday</h2>
+    <div class="card" id="d-top"></div>
+    <h2 class="section">Low Stock Products</h2>
+    <div class="card" id="d-lowlist"></div>
+  </div>
 </div>
 
 <div class="view" id="v-pos">
-  <div class="card" style="margin-bottom:12px;">
-    <strong>Receipt Sales Only</strong>
-    <div class="hint">Do not enter ordinary sales here. Use this screen only when a customer requests a receipt.</div>
-  </div>
   <div id="pos-body">
     <input id="pos-search" placeholder="Search product for receipt" autocomplete="off">
     <div id="pos-results"></div>
@@ -193,18 +179,14 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
 
 <div class="view" id="v-dailybook">
   <h2 class="section">Closing Stock</h2>
-  <div class="card" style="margin-bottom:12px;">
-    <strong>Cashier Closing Stock</strong>
-    <div class="hint">Enter the physical quantity remaining. The system calculates goods sold from opening stock + stock received − closing stock. Normal sales do not need to be entered individually.</div>
-  </div>
-  <input type="date" id="db-date">
+  <input type="date" id="db-date" class="owner-only">
   <div class="table-wrap">
     <table id="db-table">
-      <thead><tr><th>Product</th><th>Opening</th><th>Received</th><th>Available</th><th>Closing</th><th>Sold</th><th>Sell Price</th><th>Expected Sales</th></tr></thead>
+      <thead><tr><th>Product</th><th>Opening</th><th>Received</th><th>Available</th><th>Closing</th><th>Sold</th><th class="owner-only">Sell Price</th><th class="owner-only">Expected Sales</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
-  <div class="totals" id="db-totals"></div>
+  <div class="totals owner-only" id="db-totals"></div>
   <button class="btn" id="save-closing-btn" onclick="saveClosingStock()" style="margin-top:10px;">SAVE CLOSING STOCK</button>
 </div>
 
@@ -235,7 +217,6 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
   <input id="till-other" type="number" inputmode="decimal" placeholder="0">
   <button class="btn" onclick="calcTill()">CHECK CLOSING</button>
   <div class="card" id="till-result" style="margin-top:10px;"></div>
-  <div class="hint" style="margin-top:10px;">First save the physical closing stock in the Closing Stock tab. This calculation then compares the value of goods sold with the money accounted for, after cash expenses.</div>
 </div>
 
 <div class="view" id="v-history">
@@ -263,7 +244,6 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
   <label class="f">Country</label><input id="set-country">
   <button class="btn" onclick="saveSettings()">Save Settings</button>
   <h2 class="section">Users</h2>
-  <div class="hint">Create new logins in Supabase Auth dashboard; set their role here.</div>
   <div id="user-list"></div>
 </div>
 
@@ -274,9 +254,6 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
 <div id="toast"></div>
 
 <script>
-// =====================================================================
-// SETUP
-// =====================================================================
 let sb = null;
 let authBusy = false;
 
@@ -285,28 +262,25 @@ if(supabaseConfigReady()){
 } else {
   document.addEventListener('DOMContentLoaded', ()=>{
     const box=document.getElementById('login-error');
-    if(box) box.textContent='Supabase is not configured. Enter your Project URL and publishable/anon key in the configuration section at the top of this file.';
+    if(box) box.textContent='Supabase is not configured. Enter your Project URL and anon key at the top of this file.';
   });
 }
-let me = null;         // profiles row for logged-in user
+let me = null;
 let products = [];
 let cart = [];
 let payMethod = 'Cash';
-let todayBusinessDay = null; // retained for compatibility; no manual business-day workflow
 let catFilter = 'All';
 
+function isOwner(){ return me && me.role==='owner'; }
 function money(n){ return 'KSh ' + Math.round(n||0).toLocaleString(); }
-function todayStr(){
-  return new Intl.DateTimeFormat('en-CA',{
-    timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit'
-  }).format(new Date());
+function nairobiDate(d){
+  return new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit'}).format(d);
 }
+function todayStr(){ return nairobiDate(new Date()); }
 function previousDate(date){
   const d=new Date(date+'T00:00:00+03:00');
   d.setDate(d.getDate()-1);
-  return new Intl.DateTimeFormat('en-CA',{
-    timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit'
-  }).format(d);
+  return nairobiDate(d);
 }
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',2500); }
 function uid6(){ return Date.now().toString().slice(-6); }
@@ -317,17 +291,13 @@ const NAV_OWNER = [
   ['history','History'],['reports','Reports'],['settings','Settings']
 ];
 const NAV_CASHIER = [
-  ['dash','Dashboard'],['pos','POS'],['products','Products'],['inventory','Inventory'],
-  ['dailybook','Closing Stock'],['expenses','Expenses'],['till','Till'],['history','History']
+  ['dash','Dashboard'],['pos','POS'],['dailybook','Closing Stock'],['expenses','Expenses']
 ];
 
-// =====================================================================
-// AUTH
-// =====================================================================
 async function doLogin(){
   const box=document.getElementById('login-error');
   box.textContent='';
-  if(!sb){ box.textContent='Supabase is not configured. Check the two configuration values at the top of this file.'; return; }
+  if(!sb){ box.textContent='Supabase is not configured. Check the two values at the top of this file.'; return; }
   if(authBusy) return;
   authBusy=true;
   try{
@@ -352,56 +322,67 @@ async function doLogout(){ if(sb) await sb.auth.signOut(); location.reload(); }
 
 async function afterLogin(){
   if(!sb) return {error:'Supabase is not configured.'};
+  const errBox=document.getElementById('login-error');
   const {data:{user},error:userError}=await sb.auth.getUser();
   if(userError || !user){
     const msg=userError?.message || 'No authenticated user was found.';
-    document.getElementById('login-error').textContent='Session error: '+msg;
+    errBox.textContent='Session error: '+msg;
     return {error:msg};
   }
 
   const {data:profile,error:profileError}=await sb.from('profiles').select('*').eq('id',user.id).maybeSingle();
   if(profileError){
     const msg='Profile lookup failed ('+(profileError.code||'unknown')+'): '+profileError.message;
-    document.getElementById('login-error').textContent=msg;
+    errBox.textContent=msg;
     return {error:msg};
   }
   if(!profile){
-    const msg='No profile exists for this login. The profiles row must use the same UUID as the Supabase Auth user.';
-    document.getElementById('login-error').textContent=msg;
+    const msg='No profile exists for this login.';
+    errBox.textContent=msg;
     return {error:msg};
   }
   if(!profile.active){
-    const msg='Account is inactive. Ask an owner to activate it.';
-    document.getElementById('login-error').textContent=msg;
+    const msg='Account is inactive.';
+    errBox.textContent=msg;
     return {error:msg};
   }
   if(!['owner','cashier'].includes(profile.role)){
-    const msg='Invalid profile role. Set the role to owner or cashier.';
-    document.getElementById('login-error').textContent=msg;
+    const msg='Invalid profile role.';
+    errBox.textContent=msg;
     return {error:msg};
   }
 
   me=profile;
+  document.body.classList.toggle('is-cashier', me.role!=='owner');
   document.getElementById('login-screen').style.display='none';
   document.getElementById('app').style.display='block';
   document.getElementById('hdr-name').textContent=(me.name||user.email)+' · '+me.role;
   buildNav();
-  document.getElementById('add-product-btn').style.display=me.role==='owner'?'block':'none';
+  document.getElementById('add-product-btn').style.display=isOwner()?'block':'none';
   await loadProducts();
-  await checkBusinessDay();
   await renderDashboard();
   return {ok:true};
 }
 
 function buildNav(){
-  const items=me.role==='owner'?NAV_OWNER:NAV_CASHIER;
+  const items=isOwner()?NAV_OWNER:NAV_CASHIER;
   const nav=document.getElementById('main-nav');
   nav.innerHTML=items.map((it,i)=>`<button data-v="${it[0]}" class="${i===0?'active':''}">${it[1]}</button>`).join('');
   nav.querySelectorAll('button').forEach(b=>{ b.onclick=()=>{ nav.querySelectorAll('button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); document.querySelectorAll('.view').forEach(v=>v.classList.remove('active')); document.getElementById('v-'+b.dataset.v).classList.add('active'); routeView(b.dataset.v); }; });
 }
 function routeView(v){
-  if(v==='dash') renderDashboard(); if(v==='products') renderProducts(); if(v==='inventory') renderInventory(); if(v==='receive') renderReceiveScreen();
-  if(v==='dailybook'){ document.getElementById('db-date').value=todayStr(); renderDailyBook(); } if(v==='expenses') renderExpenses(); if(v==='till') renderTill(); if(v==='history') renderHistory(); if(v==='reports') renderReport('today'); if(v==='settings') renderSettings();
+  const allowed=(isOwner()?NAV_OWNER:NAV_CASHIER).map(x=>x[0]);
+  if(!allowed.includes(v)) return;
+  if(v==='dash') renderDashboard();
+  if(v==='products') renderProducts();
+  if(v==='inventory') renderInventory();
+  if(v==='receive') renderReceiveScreen();
+  if(v==='dailybook'){ document.getElementById('db-date').value=todayStr(); renderDailyBook(); }
+  if(v==='expenses') renderExpenses();
+  if(v==='till') renderTill();
+  if(v==='history') renderHistory();
+  if(v==='reports') renderReport('today');
+  if(v==='settings') renderSettings();
 }
 
 if(sb){
@@ -409,25 +390,12 @@ if(sb){
   (async()=>{ const {data:{session}}=await sb.auth.getSession(); if(session && !me) await afterLogin(); })();
 }
 
-// =====================================================================
-// DAILY DATE — NO MANUAL BUSINESS-DAY OPEN/CLOSE
-// =====================================================================
-async function checkBusinessDay(){
-  const banner = document.getElementById('day-status-banner');
-  if(banner){
-    banner.innerHTML = `<strong>Today: ${todayStr()}</strong><div class="hint">Daily figures reset automatically at midnight (Africa/Nairobi). Previous records remain available in history and reports.</div>`;
-  }
-  const posBody=document.getElementById('pos-body');
-  if(posBody) posBody.style.display='block';
-}
-// =====================================================================
-// PRODUCTS
-// =====================================================================
 async function loadProducts(){
   const { data } = await sb.from('products').select('*').order('name');
   products = data || [];
 }
 function renderProducts(){
+  if(!isOwner()) return;
   const q = (document.getElementById('prod-search').value||'').toLowerCase();
   const cats = ['All','Spirits','Beer','Wines','Soft Drinks','Energy Drinks','Other'];
   const pillBox = document.getElementById('prod-cat-filter');
@@ -441,13 +409,14 @@ function renderProducts(){
   document.getElementById('prod-list').innerHTML = list.map(p=>{
     const profit = p.selling_price - p.buying_price;
     const margin = p.selling_price>0 ? ((profit/p.selling_price)*100).toFixed(1) : '0.0';
-    return `<div class="prod-item" onclick="${me.role==='owner'?`openProductModal('${p.id}')`:''}">
-      <div><div class="name">${p.name}${!p.active?' (inactive)':''}${p.current_stock<=p.minimum_stock?'<span class=\"badge badge-low\">LOW</span>':''}</div>
+    return `<div class="prod-item" onclick="openProductModal('${p.id}')">
+      <div><div class="name">${p.name}${!p.active?' (inactive)':''}${p.current_stock<=p.minimum_stock?'<span class="badge badge-low">LOW</span>':''}</div>
       <div class="sub">Buy ${money(p.buying_price)} · Sell ${money(p.selling_price)} · Profit ${money(profit)} (${margin}%) · Stock ${p.current_stock}</div></div>
-      ${me.role==='owner'?'<div>›</div>':''}</div>`;
+      <div>›</div></div>`;
   }).join('');
 }
 function openProductModal(id){
+  if(!isOwner()) return;
   const p = id ? products.find(x=>x.id===id) : {id:'',name:'',category:'Spirits',buying_price:0,selling_price:0,current_stock:0,minimum_stock:5,active:true};
   openModal(`
     <h3>${id?'Edit':'Add'} Product</h3>
@@ -455,10 +424,9 @@ function openProductModal(id){
     <select id="f-cat">${['Spirits','Beer','Wines','Soft Drinks','Energy Drinks','Other'].map(c=>`<option ${c===p.category?'selected':''}>${c}</option>`).join('')}</select>
     <input id="f-buy" type="number" placeholder="Buying price" value="${p.buying_price||''}">
     <input id="f-sell" type="number" placeholder="Selling price" value="${p.selling_price||''}">
-    <label class="f">Or set target margin % (auto-fills selling price)</label>
+    <label class="f">Target margin %</label>
     <input id="f-margin" type="number" placeholder="Target margin %" oninput="applyTargetMargin()">
     <input id="f-stock" type="number" placeholder="Current stock" value="${p.current_stock||''}" ${id?'disabled':''}>
-    ${id?'<div class="hint">Edit stock via Receive Stock or an adjustment, not here.</div>':''}
     <input id="f-min" type="number" placeholder="Minimum stock" value="${p.minimum_stock||''}">
     <button class="btn" onclick="saveProduct('${id||''}')">Save Product</button>
     ${id && p.active ? `<button class="btn secondary" style="margin-top:8px;" onclick="deactivateProduct('${id}')">Deactivate</button>` : ''}
@@ -470,6 +438,7 @@ function applyTargetMargin(){
   if(!isNaN(m) && m<100 && m>=0){ document.getElementById('f-sell').value = (buy/(1-m/100)).toFixed(0); }
 }
 async function saveProduct(id){
+  if(!isOwner()) return;
   const name = document.getElementById('f-name').value.trim();
   if(!name){ toast('Name required'); return; }
   const payload = {
@@ -489,14 +458,12 @@ async function saveProduct(id){
   closeModal(); await loadProducts(); renderProducts(); toast('Saved');
 }
 async function deactivateProduct(id){
+  if(!isOwner()) return;
   const { error } = await sb.from('products').update({active:false}).eq('id', id);
   if(error){ toast(error.message); return; }
   closeModal(); await loadProducts(); renderProducts();
 }
 
-// =====================================================================
-// POS
-// =====================================================================
 document.getElementById('pos-search').oninput = renderPosResults;
 function renderPosResults(){
   const q = document.getElementById('pos-search').value.trim().toLowerCase();
@@ -505,7 +472,7 @@ function renderPosResults(){
   const matches = products.filter(p=>p.active && p.name.toLowerCase().includes(q)).slice(0,8);
   box.innerHTML = matches.length ? matches.map(p=>`
     <div class="prod-item" onclick="addToCart('${p.id}')">
-      <div><div class="name">${p.name}</div><div class="sub">${money(p.selling_price)} · Stock: ${p.current_stock}</div></div>
+      <div><div class="name">${p.name}</div><div class="sub">${money(p.selling_price)}${isOwner()?' · Stock: '+p.current_stock:''}</div></div>
       <div>＋</div></div>`).join('') : '<div class="card">No matches</div>';
 }
 function addToCart(id){
@@ -556,8 +523,8 @@ async function completeSale(){
   await loadProducts();
 }
 function showReceipt(sale){
-  const lines = sale.items.map(i=>`${i.name.padEnd(12)} ${String(i.qty).padStart(3)}  ${String(i.price).padStart(5)}  ${String(i.revenue).padStart(6)}`).join('\\n');
-  const receipt = `MICKEYS WINES & SPIRITS\\n\\nTxn: ${sale.txn}\\nDate: ${sale.date}  Time: ${sale.time}\\n--------------------------------\\nProduct       Qty  Price   Total\\n${lines}\\n--------------------------------\\nTOTAL:   ${money(sale.total)}\\nPAID:    ${money(sale.paid)}\\nCHANGE:  ${money(sale.change)}\\n\\nPayment: ${sale.payment}\\n\\nThank you.`;
+  const lines = sale.items.map(i=>`${i.name.padEnd(12)} ${String(i.qty).padStart(3)}  ${String(i.price).padStart(5)}  ${String(i.revenue).padStart(6)}`).join('\n');
+  const receipt = `MICKEYS WINES & SPIRITS\n\nTxn: ${sale.txn}\nDate: ${sale.date}  Time: ${sale.time}\n--------------------------------\nProduct       Qty  Price   Total\n${lines}\n--------------------------------\nTOTAL:   ${money(sale.total)}\nPAID:    ${money(sale.paid)}\nCHANGE:  ${money(sale.change)}\n\nPayment: ${sale.payment}\n\nThank you.`;
   openModal(`<h3>SALE COMPLETED</h3><div class="receipt">${receipt}</div>
     <button class="btn" style="margin-top:12px;" onclick="downloadReceipt()">Download Receipt</button>
     <button class="btn secondary" style="margin-top:8px;" onclick="closeModal()">Close</button>`);
@@ -568,10 +535,8 @@ function downloadReceipt(){
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'receipt-'+window._lastTxn+'.txt'; a.click();
 }
 
-// =====================================================================
-// INVENTORY
-// =====================================================================
 function renderInventory(){
+  if(!isOwner()) return;
   document.getElementById('inv-list').innerHTML = products.filter(p=>p.active).map(p=>`
     <div class="card" style="margin-bottom:8px;">
       <div style="display:flex;justify-content:space-between;"><strong>${p.name}</strong>${p.current_stock<=p.minimum_stock?'<span class="badge badge-low">LOW</span>':''}</div>
@@ -579,14 +544,13 @@ function renderInventory(){
     </div>`).join('');
 }
 
-// =====================================================================
-// RECEIVE STOCK
-// =====================================================================
 function renderReceiveScreen(){
+  if(!isOwner()) return;
   document.getElementById('rs-product').innerHTML = products.filter(p=>p.active).map(p=>`<option value="${p.id}" data-price="${p.buying_price}">${p.name}</option>`).join('');
   loadReceiveHistory();
 }
 async function submitReceiveStock(){
+  if(!isOwner()) return;
   const productId = document.getElementById('rs-product').value;
   const qty = parseFloat(document.getElementById('rs-qty').value);
   const price = parseFloat(document.getElementById('rs-price').value);
@@ -615,9 +579,6 @@ async function loadReceiveHistory(){
     <tr><td>${r.effective_date}</td><td>${r.products?.name||''}</td><td>${r.quantity_received}</td><td>${money(r.buying_price)}</td><td>${r.suppliers?.name||'—'}</td></tr>`).join('');
 }
 
-// =====================================================================
-// CLOSING STOCK
-// =====================================================================
 document.getElementById('db-date').onchange = renderDailyBook;
 
 async function getClosingRows(date){
@@ -632,7 +593,7 @@ async function getClosingRows(date){
   const receivedByProduct={};
   (received||[]).forEach(r=>receivedByProduct[r.product_id]=(receivedByProduct[r.product_id]||0)+Number(r.quantity_received||0));
 
-  const rows=(snapshots||[]).map(s=>({
+  return (snapshots||[]).map(s=>({
     ...s,
     added_stock:Number(receivedByProduct[s.product_id]||0),
     opening_stock:Number(s.opening_stock||0),
@@ -641,12 +602,11 @@ async function getClosingRows(date){
     buy:Number(s.products?.buying_price||0),
     name:s.products?.name||'Unknown'
   }));
-  return rows;
 }
 
 async function ensureTodaySnapshots(){
   const date=todayStr();
-  const {data:existing}=await sb.from('daily_stock_snapshot').select('product_id,opening_stock,added_stock,closing_stock').eq('business_date',date);
+  const {data:existing}=await sb.from('daily_stock_snapshot').select('product_id').eq('business_date',date);
   const existingIds=new Set((existing||[]).map(x=>x.product_id));
   const {data:yesterday}=await sb.from('daily_stock_snapshot').select('product_id,closing_stock').eq('business_date',previousDate(date));
   const yesterdayMap={}; (yesterday||[]).forEach(x=>yesterdayMap[x.product_id]=x.closing_stock);
@@ -667,7 +627,7 @@ async function ensureTodaySnapshots(){
 }
 
 async function renderDailyBook(){
-  const date=document.getElementById('db-date').value||todayStr();
+  const date=isOwner()?(document.getElementById('db-date').value||todayStr()):todayStr();
   if(date===todayStr()) await ensureTodaySnapshots();
 
   const rows=await getClosingRows(date);
@@ -681,7 +641,7 @@ async function renderDailyBook(){
     return `<tr>
       <td>${r.name}</td><td>${r.opening_stock}</td><td>${r.added_stock}</td><td>${available}</td>
       <td><input class="close-stock-input" data-product="${r.product_id}" type="number" min="0" step="1" value="${closing}" placeholder="Qty"></td>
-      <td>${sold}</td><td>${money(r.sell)}</td><td>${money(sales)}</td>
+      <td>${sold}</td><td class="owner-only">${money(r.sell)}</td><td class="owner-only">${money(sales)}</td>
     </tr>`;
   }).join('');
   document.querySelector('#db-table tbody').innerHTML=html||'<tr><td colspan="8">No products found.</td></tr>';
@@ -691,16 +651,14 @@ async function renderDailyBook(){
     <div class="row"><span>COGS</span><span>${money(totalCogs)}</span></div>
     <div class="row big"><span>Estimated Gross Profit</span><span>${money(totalProfit)}</span></div>`;
   document.querySelectorAll('.close-stock-input').forEach(i=>i.oninput=updateClosingPreview);
-  document.getElementById('save-closing-btn').style.display=(me.role==='cashier'||me.role==='owner')?'block':'none';
 }
 
 function updateClosingPreview(){
   let sold=0,sales=0;
   document.querySelectorAll('#db-table tbody tr').forEach(tr=>{
-    const cells=tr.children; if(!cells.length) return;
+    const cells=tr.children; if(cells.length<8) return;
     const available=Number(cells[3].textContent)||0;
-    const sellText=cells[6].textContent.replace(/[^0-9.-]/g,'');
-    const sell=Number(sellText)||0;
+    const sell=Number(cells[6].textContent.replace(/[^0-9.-]/g,''))||0;
     const input=tr.querySelector('.close-stock-input');
     const closing=input && input.value!=='' ? Number(input.value) : null;
     const s=closing==null?0:Math.max(0,available-closing);
@@ -708,17 +666,13 @@ function updateClosingPreview(){
     cells[7].textContent=money(s*sell);
     sold+=s; sales+=s*sell;
   });
-  const t=document.getElementById('db-totals');
-  if(t){
-    const rows=t.querySelectorAll('.row');
-    if(rows[0]) rows[0].querySelector('span:last-child').textContent=sold+' units';
-    if(rows[1]) rows[1].querySelector('span:last-child').textContent=money(sales);
-  }
+  const rows=document.querySelectorAll('#db-totals .row');
+  if(rows[0]) rows[0].querySelector('span:last-child').textContent=sold+' units';
+  if(rows[1]) rows[1].querySelector('span:last-child').textContent=money(sales);
 }
 
 async function saveClosingStock(){
-  const date=document.getElementById('db-date').value||todayStr();
-  if(date!==todayStr() && me.role!=='owner'){ toast('Cashier can only submit today\'s closing stock.'); return; }
+  const date=isOwner()?(document.getElementById('db-date').value||todayStr()):todayStr();
   const inputs=[...document.querySelectorAll('.close-stock-input')];
   if(!inputs.length){ toast('No products to close.'); return; }
   const values=[];
@@ -730,30 +684,28 @@ async function saveClosingStock(){
   }
 
   const {data:snapshots,error:snapError}=await sb.from('daily_stock_snapshot')
-    .select('product_id,opening_stock,added_stock')
+    .select('product_id')
     .eq('business_date',date);
   if(snapError){ toast('Could not read stock opening data: '+snapError.message); return; }
   const map={}; (snapshots||[]).forEach(s=>map[s.product_id]=s);
 
   for(const v of values){
-    const s=map[v.productId];
-    if(!s) { toast('Missing stock snapshot for one or more products.'); return; }
+    if(!map[v.productId]){ toast('Missing stock snapshot for one or more products.'); return; }
     const {error}=await sb.from('daily_stock_snapshot')
       .update({closing_stock:v.closing}).eq('business_date',date).eq('product_id',v.productId);
     if(error){ toast('Could not save '+(products.find(p=>p.id===v.productId)?.name||'stock')+': '+error.message); return; }
-    // Keep current inventory aligned with the physical count.
-    const {error:stockError}=await sb.from('products').update({current_stock:v.closing}).eq('id',v.productId);
-    if(stockError){ toast('Closing stock saved, but inventory update failed: '+stockError.message); return; }
+    if(date===todayStr()){
+      const {error:stockError}=await sb.from('products').update({current_stock:v.closing}).eq('id',v.productId);
+      if(stockError){ toast('Closing stock saved, but inventory update failed: '+stockError.message); return; }
+    }
   }
 
-  toast('Closing stock saved. Now check the Till.');
+  toast('Closing stock saved');
   await loadProducts();
   await renderDailyBook();
-  await renderTill();
+  if(isOwner()) await renderTill();
 }
-// =====================================================================
-// EXPENSES
-// =====================================================================
+
 async function submitExpense(){
   const amount = parseFloat(document.getElementById('exp-amount').value);
   if(!amount){ toast('Enter an amount'); return; }
@@ -772,10 +724,8 @@ async function renderExpenses(){
   document.getElementById('exp-total').textContent = money((data||[]).reduce((a,e)=>a+Number(e.amount),0));
 }
 
-// =====================================================================
-// DAILY TILL CHECK
-// =====================================================================
 async function renderTill(){
+  if(!isOwner()) return;
   const date=todayStr();
   const rows=await getClosingRows(date);
   const {data:sales}=await sb.from('sales').select('total,payment_method').eq('business_date',date).eq('status','completed');
@@ -784,8 +734,7 @@ async function renderTill(){
   let expectedSales=0;
   rows.forEach(r=>{
     if(r.closing_stock==='') return;
-    const available=r.opening_stock+r.added_stock;
-    const sold=Math.max(0,available-r.closing_stock);
+    const sold=Math.max(0,r.opening_stock+r.added_stock-r.closing_stock);
     expectedSales += sold*r.sell;
   });
   const receiptSales=(sales||[]).reduce((a,s)=>a+Number(s.total||0),0);
@@ -798,11 +747,11 @@ async function renderTill(){
   document.getElementById('till-summary').innerHTML=`
     <div class="list-row"><span>Expected sales from closing stock</span><strong>${money(expectedSales)}</strong></div>
     <div class="list-row"><span>Receipt sales included</span><span>${money(receiptSales)}</span></div>
-    <div class="list-row"><span>Cash expenses</span><span>-${money(cashExpenses)}</span></div>
-    <div class="hint" style="margin-top:8px;">Receipt sales are already included in goods sold, so they are not added a second time.</div>`;
+    <div class="list-row"><span>Cash expenses</span><span>-${money(cashExpenses)}</span></div>`;
 }
 
 function calcTill(){
+  if(!isOwner()) return;
   if(!window._till){ toast('Open Till again to load today\'s figures.'); return; }
   const actualCash=Number(document.getElementById('till-actual').value);
   const mpesa=Number(document.getElementById('till-mpesa').value)||0;
@@ -826,11 +775,10 @@ function calcTill(){
     <div class="list-row"><strong>Difference</strong><strong style="color:${colour}">${difference>=0?'+':''}${money(difference)}</strong></div>
     <div class="card" style="margin-top:10px;text-align:center;font-size:20px;font-weight:800;color:${colour};">${status}</div>`;
 }
-// =====================================================================
-// SALES HISTORY
-// =====================================================================
+
 let historyCache = [];
 async function renderHistory(){
+  if(!isOwner()) return;
   const { data } = await sb.from('sales').select('*, sale_items(*)').order('created_at',{ascending:false}).limit(100);
   historyCache = data || [];
   renderHistoryList();
@@ -844,12 +792,11 @@ function renderHistoryList(){
   document.getElementById('hist-list').innerHTML = filtered.map(s=>{
     const profit = (s.sale_items||[]).reduce((a,i)=>a+Number(i.profit),0);
     return `<div class="prod-item" onclick='viewSale(${JSON.stringify(s.id)})'>
-      <div><div class="name">#${s.transaction_number} ${s.status==='voided'?'<span class=\"badge badge-low\">VOIDED</span>':''}</div>
+      <div><div class="name">#${s.transaction_number} ${s.status==='voided'?'<span class="badge badge-low">VOIDED</span>':''}</div>
       <div class="sub">${s.business_date} · ${s.payment_method} · Profit ${money(profit)}</div></div>
       <div>${money(s.total)}</div></div>`;
   }).join('');
 }
-document.getElementById('hist-search')?.addEventListener('input', renderHistoryList);
 function viewSale(id){
   const s = historyCache.find(x=>x.id===id); if(!s) return;
   const lines = (s.sale_items||[]).map(i=>`${i.product_name} × ${i.quantity} = ${money(i.revenue)}`).join('<br>');
@@ -858,10 +805,11 @@ function viewSale(id){
     <div style="margin:10px 0;">${lines}</div>
     <div class="row big" style="display:flex;justify-content:space-between;"><span>Total</span><span>${money(s.total)}</span></div>
     ${s.status==='voided' ? `<div class="hint">Voided: ${s.void_reason||''}</div>` :
-      (me.role==='owner' ? `<button class="btn danger" style="margin-top:10px;" onclick="voidThisSale('${s.id}')">Void Sale</button>` : '')}
+      `<button class="btn danger" style="margin-top:10px;" onclick="voidThisSale('${s.id}')">Void Sale</button>`}
   `);
 }
 async function voidThisSale(id){
+  if(!isOwner()) return;
   const reason = prompt('Reason for voiding this sale?');
   if(reason===null) return;
   const { error } = await sb.rpc('void_sale', { p_sale_id: id, p_reason: reason, p_user_id: await currentUserId() });
@@ -869,21 +817,19 @@ async function voidThisSale(id){
   closeModal(); toast('Sale voided'); await loadProducts(); renderHistory();
 }
 
-// =====================================================================
-// REPORTS
-// =====================================================================
 document.querySelectorAll('.pill-row button[data-r]').forEach(b=>{
   b.onclick=()=>{ document.querySelectorAll('.pill-row button[data-r]').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); renderReport(b.dataset.r); };
 });
 function rangeFor(period){
   const now = new Date(); let start, end = todayStr();
   if(period==='today') start = todayStr();
-  else if(period==='yesterday'){ const d=new Date(); d.setDate(d.getDate()-1); start=end=d.toISOString().slice(0,10); }
-  else if(period==='week'){ const d=new Date(); d.setDate(d.getDate()-d.getDay()); start=d.toISOString().slice(0,10); }
-  else if(period==='month'){ start = now.toISOString().slice(0,7)+'-01'; }
+  else if(period==='yesterday'){ start=end=previousDate(todayStr()); }
+  else if(period==='week'){ const d=new Date(); d.setDate(d.getDate()-d.getDay()); start=nairobiDate(d); }
+  else if(period==='month'){ start = todayStr().slice(0,7)+'-01'; }
   return { start, end };
 }
 async function renderReport(period){
+  if(!isOwner()) return;
   const { start, end } = rangeFor(period);
   const { data:sales } = await sb.from('sales').select('*, sale_items(*)').gte('business_date',start).lte('business_date',end).eq('status','completed');
   const { data:expenses } = await sb.from('expenses').select('*').gte('business_date',start).lte('business_date',end);
@@ -919,17 +865,15 @@ async function renderReport(period){
 }
 function exportCSV(){
   const r = window._reportData; if(!r){ toast('Open a report first'); return; }
-  let csv = 'Metric,Value\\n';
-  csv += `Period,${r.start} to ${r.end}\\nTotal Sales,${r.revenue}\\nCOGS,${r.cogs}\\nGross Profit,${r.grossProfit}\\nExpenses,${r.totalExpenses}\\nNet Profit,${r.netProfit}\\nCash Sales,${r.cash}\\nM-Pesa Sales,${r.mpesa}\\nOther Sales,${r.other}\\n\\nProduct,Qty,Revenue,Profit\\n`;
-  r.top.forEach(([n,d])=>{ csv += `${n},${d.qty},${d.revenue},${d.profit}\\n`; });
+  let csv = 'Metric,Value\n';
+  csv += `Period,${r.start} to ${r.end}\nTotal Sales,${r.revenue}\nCOGS,${r.cogs}\nGross Profit,${r.grossProfit}\nExpenses,${r.totalExpenses}\nNet Profit,${r.netProfit}\nCash Sales,${r.cash}\nM-Pesa Sales,${r.mpesa}\nOther Sales,${r.other}\n\nProduct,Qty,Revenue,Profit\n`;
+  r.top.forEach(([n,d])=>{ csv += `${n},${d.qty},${d.revenue},${d.profit}\n`; });
   const blob = new Blob([csv], {type:'text/csv'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `report-${r.start}-to-${r.end}.csv`; a.click();
 }
 
-// =====================================================================
-// SETTINGS
-// =====================================================================
 async function renderSettings(){
+  if(!isOwner()) return;
   const { data } = await sb.from('settings').select('*').single();
   if(data){ document.getElementById('set-name').value=data.business_name; document.getElementById('set-currency').value=data.currency; document.getElementById('set-country').value=data.country; }
   const { data:users } = await sb.from('profiles').select('*').order('name');
@@ -943,6 +887,7 @@ async function renderSettings(){
     </div>`).join('');
 }
 async function saveSettings(){
+  if(!isOwner()) return;
   const { error } = await sb.from('settings').update({
     business_name: document.getElementById('set-name').value,
     currency: document.getElementById('set-currency').value,
@@ -953,7 +898,7 @@ async function saveSettings(){
   toast('Settings saved');
 }
 async function updateRole(id, role){
-  if(me?.role!=='owner'){ toast('Owner access required'); return; }
+  if(!isOwner()){ toast('Owner access required'); return; }
   if(id===me.id && role!=='owner'){ toast('Do not remove your own owner role.'); await renderSettings(); return; }
   const { error } = await sb.from('profiles').update({role}).eq('id', id);
   if(error){ toast('Role update failed: '+error.message); await renderSettings(); return; }
@@ -961,38 +906,37 @@ async function updateRole(id, role){
   await renderSettings();
 }
 
-// =====================================================================
-// DASHBOARD
-// =====================================================================
 async function renderDashboard(){
-  const date = todayStr();
-  const { data:sales } = await sb.from('sales').select('*, sale_items(*)').eq('business_date',date).eq('status','completed');
+  const date=previousDate(todayStr());
+  document.getElementById('d-title').textContent='Yesterday · '+date;
+
   const { data:expenses } = await sb.from('expenses').select('amount').eq('business_date',date);
-  let revenue=0, cogs=0; const byProduct={};
-  (sales||[]).forEach(s=>(s.sale_items||[]).forEach(i=>{
-    revenue+=Number(i.revenue); cogs+=Number(i.cost);
-    byProduct[i.product_name]=(byProduct[i.product_name]||0)+Number(i.quantity);
-  }));
   const totalExpenses=(expenses||[]).reduce((a,e)=>a+Number(e.amount),0);
-  const grossProfit=revenue-cogs, netProfit=grossProfit-totalExpenses;
+  document.getElementById('d-exp').textContent=money(totalExpenses);
+
+  const rows=await getClosingRows(date);
+  let revenue=0, cogs=0; const sold=[];
+  rows.forEach(r=>{
+    if(r.closing_stock==='') return;
+    const qty=Math.max(0,r.opening_stock+r.added_stock-r.closing_stock);
+    revenue+=qty*r.sell; cogs+=qty*r.buy;
+    if(qty>0) sold.push([r.name,qty]);
+  });
   document.getElementById('d-sales').textContent=money(revenue);
+
+  if(!isOwner()) return;
+  const grossProfit=revenue-cogs, netProfit=grossProfit-totalExpenses;
   document.getElementById('d-cogs').textContent=money(cogs);
   document.getElementById('d-profit').textContent=money(grossProfit);
-  document.getElementById('d-exp').textContent=money(totalExpenses);
   document.getElementById('d-net').textContent=money(netProfit);
-  document.getElementById('d-tx').textContent=(sales||[]).length;
   const low = products.filter(p=>p.active && p.current_stock<=p.minimum_stock);
   document.getElementById('d-low').textContent=low.length;
   document.getElementById('d-stockval').textContent=money(products.reduce((a,p)=>a+p.current_stock*p.buying_price,0));
-  document.getElementById('d-recent').innerHTML=(sales||[]).slice(-5).reverse().map(s=>`<div class="list-row"><span>#${s.transaction_number} · ${s.payment_method}</span><span>${money(s.total)}</span></div>`).join('') || '<div class="list-row"><span>No sales yet</span></div>';
-  const top=Object.entries(byProduct).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  document.getElementById('d-top').innerHTML = top.map(([n,q])=>`<div class="list-row"><span>${n}</span><span>${q} sold</span></div>`).join('') || '<div class="list-row"><span>No sales yet</span></div>';
+  const top=sold.sort((a,b)=>b[1]-a[1]).slice(0,5);
+  document.getElementById('d-top').innerHTML = top.map(([n,q])=>`<div class="list-row"><span>${n}</span><span>${q} sold</span></div>`).join('') || '<div class="list-row"><span>No sales recorded</span></div>';
   document.getElementById('d-lowlist').innerHTML = low.map(p=>`<div class="list-row"><span>${p.name}</span><span class="badge badge-low">${p.current_stock} left</span></div>`).join('') || '<div class="list-row"><span>None</span></div>';
 }
 
-// =====================================================================
-// MODAL
-// =====================================================================
 function openModal(html){ document.getElementById('modal-body').innerHTML=html; document.getElementById('modal-bg').classList.add('open'); }
 function closeModal(){ document.getElementById('modal-bg').classList.remove('open'); }
 document.getElementById('modal-bg').onclick=(e)=>{ if(e.target.id==='modal-bg') closeModal(); };
