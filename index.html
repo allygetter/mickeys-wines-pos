@@ -683,22 +683,11 @@ async function saveClosingStock(){
     values.push({productId:input.dataset.product,closing:qty});
   }
 
-  const {data:snapshots,error:snapError}=await sb.from('daily_stock_snapshot')
-    .select('product_id')
-    .eq('business_date',date);
-  if(snapError){ toast('Could not read stock opening data: '+snapError.message); return; }
-  const map={}; (snapshots||[]).forEach(s=>map[s.product_id]=s);
-
-  for(const v of values){
-    if(!map[v.productId]){ toast('Missing stock snapshot for one or more products.'); return; }
-    const {error}=await sb.from('daily_stock_snapshot')
-      .update({closing_stock:v.closing}).eq('business_date',date).eq('product_id',v.productId);
-    if(error){ toast('Could not save '+(products.find(p=>p.id===v.productId)?.name||'stock')+': '+error.message); return; }
-    if(date===todayStr()){
-      const {error:stockError}=await sb.from('products').update({current_stock:v.closing}).eq('id',v.productId);
-      if(stockError){ toast('Closing stock saved, but inventory update failed: '+stockError.message); return; }
-    }
-  }
+  const {error}=await sb.rpc('save_closing_stock',{
+    p_business_date:date,
+    p_items:values.map(v=>({product_id:v.productId,closing:v.closing}))
+  });
+  if(error){ toast(error.message); return; }
 
   toast('Closing stock saved');
   await loadProducts();
