@@ -6,6 +6,17 @@
 <title>Mickeys Wines & Spirits POS</title>
 
 <script>
+  var _bootErrors=[];
+  function showBootError(m){
+    var b=document.getElementById('login-error');
+    if(b){ b.textContent='Error: '+m; } else { _bootErrors.push(m); }
+    if(typeof toast==='function'){ try{ toast(m); }catch(_){} }
+  }
+  window.addEventListener('error',function(e){ showBootError(e.message||'Script error'); });
+  window.addEventListener('unhandledrejection',function(e){ showBootError((e.reason&&e.reason.message)||String(e.reason)); });
+  document.addEventListener('DOMContentLoaded',function(){ if(_bootErrors.length) showBootError(_bootErrors[0]); });
+</script>
+<script>
   const SUPABASE_URL = "https://qnoekttidazffpzvucoa.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFub2VrdHRpZGF6ZmZwenZ1Y29hIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAzNTA2OTAsImV4cCI6MjEwNTkyNjY5MH0.ACcPRgSbHk1okQMBqBTuOu-GMzrrWYp7rxVtD2kJaBs";
 
@@ -97,6 +108,7 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
     <input id="login-pass" type="password" placeholder="Password" autocomplete="current-password">
     <button class="btn" onclick="doLogin()">Log In</button>
     <div id="login-error" class="hint" style="color:var(--bad);"></div>
+    <div class="hint" style="text-align:center;opacity:.5;">v5</div>
   </div>
 </div>
 
@@ -168,13 +180,13 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
   <h2 class="section">Receive Stock</h2>
   <select id="rs-product"></select>
   <input id="rs-qty" type="number" placeholder="Quantity received">
-  <input id="rs-price" type="number" placeholder="Buying price per unit">
+  <input id="rs-price" class="owner-only" type="number" placeholder="Buying price per unit (optional)">
   <input id="rs-supplier" placeholder="Supplier name (optional)">
   <input id="rs-ref" placeholder="Reference / Invoice number (optional)">
   <textarea id="rs-notes" placeholder="Notes (optional)" rows="2"></textarea>
   <button class="btn" onclick="submitReceiveStock()">Save Received Stock</button>
   <h2 class="section">Recent Receipts</h2>
-  <div class="table-wrap"><table id="rs-history"><thead><tr><th>Date</th><th>Product</th><th>Qty</th><th>Cost</th><th>Supplier</th></tr></thead><tbody></tbody></table></div>
+  <div class="table-wrap"><table id="rs-history"><thead><tr><th>Date</th><th>Product</th><th>Qty</th><th class="owner-only">Cost</th><th class="owner-only">By</th><th>Supplier</th><th class="owner-only"></th></tr></thead><tbody></tbody></table></div>
 </div>
 
 <div class="view" id="v-dailybook">
@@ -258,7 +270,11 @@ let sb = null;
 let authBusy = false;
 
 if(supabaseConfigReady()){
-  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  if(typeof supabase==='undefined'){
+    showBootError('The Supabase library did not load. Check the internet connection or ad blocker.');
+  } else {
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
 } else {
   document.addEventListener('DOMContentLoaded', ()=>{
     const box=document.getElementById('login-error');
@@ -291,7 +307,7 @@ const NAV_OWNER = [
   ['history','History'],['reports','Reports'],['settings','Settings']
 ];
 const NAV_CASHIER = [
-  ['dash','Dashboard'],['pos','POS'],['dailybook','Closing Stock'],['expenses','Expenses']
+  ['dash','Dashboard'],['pos','POS'],['receive','Receive Stock'],['dailybook','Closing Stock'],['expenses','Expenses']
 ];
 
 async function doLogin(){
@@ -321,6 +337,19 @@ async function currentUserId(){
 async function doLogout(){ if(sb) await sb.auth.signOut(); location.reload(); }
 
 async function afterLogin(){
+  try{ return await openApp(); }
+  catch(e){
+    me=null;
+    document.body.classList.remove('is-cashier');
+    document.getElementById('app').style.display='none';
+    document.getElementById('login-screen').style.display='';
+    const msg='Could not open the app: '+(e&&e.message?e.message:e);
+    document.getElementById('login-error').textContent=msg;
+    try{ await sb.auth.signOut(); }catch(_){}
+    return {error:msg};
+  }
+}
+async function openApp(){
   if(!sb) return {error:'Supabase is not configured.'};
   const errBox=document.getElementById('login-error');
   const {data:{user},error:userError}=await sb.auth.getUser();
@@ -391,7 +420,7 @@ if(sb){
 }
 
 async function loadProducts(){
-  const { data } = await sb.from('products').select('*').order('name');
+  const { data } = await sb.from(isOwner()?'products':'products_staff').select('*').order('name');
   products = data || [];
 }
 function renderProducts(){
@@ -479,7 +508,7 @@ function addToCart(id){
   const p = products.find(x=>x.id===id); if(!p) return;
   if(p.current_stock<=0){ toast('Out of stock'); return; }
   let item = cart.find(c=>c.id===id);
-  if(item) item.qty += 1; else cart.push({id:p.id, name:p.name, price:p.selling_price, buying:p.buying_price, qty:1, stock:p.current_stock});
+  if(item) item.qty += 1; else cart.push({id:p.id, name:p.name, price:p.selling_price, qty:1, stock:p.current_stock});
   document.getElementById('pos-search').value=''; document.getElementById('pos-results').innerHTML='';
   renderCart();
 }
@@ -511,7 +540,7 @@ async function completeSale(){
   const paid = parseFloat(document.getElementById('pos-paid').value)||0;
   if(paid < subtotal){ if(!confirm('Amount paid is less than total. Continue?')) return; }
   const txn = uid6();
-  const items = cart.map(c=>({ product_id:c.id, product_name:c.name, quantity:c.qty, selling_price:c.price, buying_price:c.buying }));
+  const items = cart.map(c=>({ product_id:c.id, product_name:c.name, quantity:c.qty, selling_price:c.price }));
   const { error } = await sb.rpc('complete_sale', {
     p_txn: txn, p_business_date: todayStr(), p_cashier_id: await currentUserId(),
     p_subtotal: subtotal, p_total: subtotal, p_paid: paid, p_change: Math.max(0,paid-subtotal),
@@ -545,27 +574,21 @@ function renderInventory(){
 }
 
 function renderReceiveScreen(){
-  if(!isOwner()) return;
-  document.getElementById('rs-product').innerHTML = products.filter(p=>p.active).map(p=>`<option value="${p.id}" data-price="${p.buying_price}">${p.name}</option>`).join('');
+  document.getElementById('rs-product').innerHTML = products.filter(p=>p.active).map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   loadReceiveHistory();
 }
 async function submitReceiveStock(){
-  if(!isOwner()) return;
   const productId = document.getElementById('rs-product').value;
   const qty = parseFloat(document.getElementById('rs-qty').value);
-  const price = parseFloat(document.getElementById('rs-price').value);
-  if(!productId || !qty || isNaN(price)){ toast('Fill product, quantity and buying price'); return; }
-  let supplierId = null;
-  const supplierName = document.getElementById('rs-supplier').value.trim();
-  if(supplierName){
-    const { data:existing } = await sb.from('suppliers').select('id').eq('name', supplierName).maybeSingle();
-    if(existing) supplierId = existing.id;
-    else { const { data:created } = await sb.from('suppliers').insert({name:supplierName}).select().single(); supplierId = created?.id; }
-  }
+  const priceRaw = document.getElementById('rs-price').value;
+  const price = isOwner() && priceRaw!=='' ? parseFloat(priceRaw) : null;
+  if(!productId || !qty || qty<=0){ toast('Select a product and enter the quantity'); return; }
+  if(price!==null && (isNaN(price)||price<0)){ toast('Enter a valid buying price'); return; }
   const { error } = await sb.rpc('receive_stock', {
-    p_product_id: productId, p_quantity: qty, p_buying_price: price, p_supplier_id: supplierId,
-    p_reference: document.getElementById('rs-ref').value, p_notes: document.getElementById('rs-notes').value,
-    p_user_id: me.id, p_business_date: todayStr()
+    p_product_id: productId, p_quantity: qty, p_buying_price: price,
+    p_supplier_name: document.getElementById('rs-supplier').value.trim(),
+    p_reference: document.getElementById('rs-ref').value,
+    p_notes: document.getElementById('rs-notes').value
   });
   if(error){ toast(error.message); return; }
   toast('Stock received');
@@ -574,34 +597,55 @@ async function submitReceiveStock(){
   await loadProducts(); loadReceiveHistory();
 }
 async function loadReceiveHistory(){
-  const { data } = await sb.from('product_costs').select('*, products(name), suppliers(name)').order('created_at',{ascending:false}).limit(15);
-  document.querySelector('#rs-history tbody').innerHTML = (data||[]).map(r=>`
-    <tr><td>${r.effective_date}</td><td>${r.products?.name||''}</td><td>${r.quantity_received}</td><td>${money(r.buying_price)}</td><td>${r.suppliers?.name||'—'}</td></tr>`).join('');
+  let rows=[];
+  if(isOwner()){
+    const { data } = await sb.from('product_costs').select('*, products(name), suppliers(name), profiles(name)').order('created_at',{ascending:false}).limit(15);
+    rows=(data||[]).map(r=>({id:r.id,date:r.effective_date,product:r.products?.name||'',qty:r.quantity_received,cost:money(r.buying_price),by:r.profiles?.name||'',supplier:r.suppliers?.name||'—'}));
+  } else {
+    const { data } = await sb.from('product_received').select('*').order('created_at',{ascending:false}).limit(15);
+    const names={}; products.forEach(p=>names[p.id]=p.name);
+    rows=(data||[]).map(r=>({date:r.effective_date,product:names[r.product_id]||'',qty:r.quantity_received,cost:'',by:'',supplier:r.supplier_name||'—'}));
+  }
+  document.querySelector('#rs-history tbody').innerHTML = rows.map(r=>`
+    <tr><td>${r.date}</td><td>${r.product}</td><td>${r.qty}</td><td class="owner-only">${r.cost}</td><td class="owner-only">${r.by}</td><td>${r.supplier}</td><td class="owner-only">${r.id?`<button class="btn small danger" onclick="reverseReceipt('${r.id}')">Reverse</button>`:''}</td></tr>`).join('');
+}
+
+async function reverseReceipt(id){
+  if(!isOwner()) return;
+  if(!confirm('Reverse this receipt? The entry will be deleted and today\'s stock reduced.')) return;
+  const { error } = await sb.rpc('reverse_receipt', { p_cost_id: id });
+  if(error){ toast(error.message); return; }
+  toast('Receipt reversed');
+  await loadProducts(); loadReceiveHistory();
 }
 
 document.getElementById('db-date').onchange = renderDailyBook;
 
 async function getClosingRows(date){
   const {data:snapshots,error:snapError}=await sb.from('daily_stock_snapshot')
-    .select('*, products(name,buying_price,selling_price,active,current_stock)')
+    .select('*')
     .eq('business_date',date);
   if(snapError){ toast('Closing stock lookup failed: '+snapError.message); return []; }
 
-  const {data:received}=await sb.from('product_costs')
+  const {data:received}=await sb.from('product_received')
     .select('product_id,quantity_received')
     .eq('effective_date',date);
   const receivedByProduct={};
   (received||[]).forEach(r=>receivedByProduct[r.product_id]=(receivedByProduct[r.product_id]||0)+Number(r.quantity_received||0));
 
-  return (snapshots||[]).map(s=>({
-    ...s,
-    added_stock:Number(receivedByProduct[s.product_id]||0),
-    opening_stock:Number(s.opening_stock||0),
-    closing_stock:s.closing_stock==null?'':Number(s.closing_stock),
-    sell:Number(s.products?.selling_price||0),
-    buy:Number(s.products?.buying_price||0),
-    name:s.products?.name||'Unknown'
-  }));
+  const pmap={}; products.forEach(p=>pmap[p.id]=p);
+  return (snapshots||[]).map(s=>{
+    const p=pmap[s.product_id]||{};
+    return {
+      ...s,
+      added_stock:Number(receivedByProduct[s.product_id]||0),
+      opening_stock:Number(s.opening_stock||0),
+      closing_stock:s.closing_stock==null?'':Number(s.closing_stock),
+      sell:Number(p.selling_price||0),
+      buy:Number(p.buying_price||0),
+      name:p.name||'Unknown'
+    };
+  });
 }
 
 async function ensureTodaySnapshots(){
@@ -610,7 +654,7 @@ async function ensureTodaySnapshots(){
   const existingIds=new Set((existing||[]).map(x=>x.product_id));
   const {data:yesterday}=await sb.from('daily_stock_snapshot').select('product_id,closing_stock').eq('business_date',previousDate(date));
   const yesterdayMap={}; (yesterday||[]).forEach(x=>yesterdayMap[x.product_id]=x.closing_stock);
-  const {data:received}=await sb.from('product_costs').select('product_id,quantity_received').eq('effective_date',date);
+  const {data:received}=await sb.from('product_received').select('product_id,quantity_received').eq('effective_date',date);
   const receivedMap={}; (received||[]).forEach(r=>receivedMap[r.product_id]=(receivedMap[r.product_id]||0)+Number(r.quantity_received||0));
 
   const missing=products.filter(p=>p.active && !existingIds.has(p.id)).map(p=>({
@@ -683,22 +727,11 @@ async function saveClosingStock(){
     values.push({productId:input.dataset.product,closing:qty});
   }
 
-  const {data:snapshots,error:snapError}=await sb.from('daily_stock_snapshot')
-    .select('product_id')
-    .eq('business_date',date);
-  if(snapError){ toast('Could not read stock opening data: '+snapError.message); return; }
-  const map={}; (snapshots||[]).forEach(s=>map[s.product_id]=s);
-
-  for(const v of values){
-    if(!map[v.productId]){ toast('Missing stock snapshot for one or more products.'); return; }
-    const {error}=await sb.from('daily_stock_snapshot')
-      .update({closing_stock:v.closing}).eq('business_date',date).eq('product_id',v.productId);
-    if(error){ toast('Could not save '+(products.find(p=>p.id===v.productId)?.name||'stock')+': '+error.message); return; }
-    if(date===todayStr()){
-      const {error:stockError}=await sb.from('products').update({current_stock:v.closing}).eq('id',v.productId);
-      if(stockError){ toast('Closing stock saved, but inventory update failed: '+stockError.message); return; }
-    }
-  }
+  const {error}=await sb.rpc('save_closing_stock',{
+    p_business_date:date,
+    p_items:values.map(v=>({product_id:v.productId,closing:v.closing}))
+  });
+  if(error){ toast(error.message); return; }
 
   toast('Closing stock saved');
   await loadProducts();
