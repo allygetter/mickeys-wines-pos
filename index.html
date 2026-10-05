@@ -87,6 +87,7 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
 .pill-row button{flex:0 0 auto;padding:7px 12px;border-radius:16px;border:1px solid var(--border);background:var(--panel2);color:var(--text);font-size:12px;}
 .pill-row button.sel{background:var(--accent);color:var(--accent-text);border-color:var(--accent);font-weight:700;}
 .center{text-align:center;}
+.close-stock-input{width:92px;margin:0;padding:8px;}
 .login-wrap{min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:20px;}
 .login-box{width:100%;max-width:360px;}
 .login-box h1{text-align:center;margin-bottom:24px;}
@@ -140,11 +141,14 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
 </div>
 
 <div class="view" id="v-pos">
-  <div id="pos-day-guard"></div>
-  <div id="pos-body" style="display:none;">
-    <input id="pos-search" placeholder="Search product (e.g. King)" autocomplete="off">
+  <div class="card" style="margin-bottom:12px;">
+    <strong>Receipt Sales Only</strong>
+    <div class="hint">Do not enter ordinary sales here. Use this screen only when a customer requests a receipt.</div>
+  </div>
+  <div id="pos-body">
+    <input id="pos-search" placeholder="Search product for receipt" autocomplete="off">
     <div id="pos-results"></div>
-    <h2 class="section">Cart</h2>
+    <h2 class="section">Receipt Cart</h2>
     <div class="card" id="pos-cart"><div class="list-row"><span>Cart is empty</span></div></div>
     <div class="totals">
       <div class="row"><span>Subtotal</span><span id="pos-subtotal">KSh 0</span></div>
@@ -157,7 +161,7 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
         <button data-m="M-Pesa">M-Pesa</button>
         <button data-m="Other">Other</button>
       </div>
-      <button class="btn" onclick="completeSale()">COMPLETE SALE</button>
+      <button class="btn" onclick="completeSale()">RECORD RECEIPT SALE</button>
     </div>
   </div>
 </div>
@@ -188,15 +192,20 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
 </div>
 
 <div class="view" id="v-dailybook">
-  <h2 class="section">Daily Sales Book</h2>
+  <h2 class="section">Closing Stock</h2>
+  <div class="card" style="margin-bottom:12px;">
+    <strong>Cashier Closing Stock</strong>
+    <div class="hint">Enter the physical quantity remaining. The system calculates goods sold from opening stock + stock received − closing stock. Normal sales do not need to be entered individually.</div>
+  </div>
   <input type="date" id="db-date">
   <div class="table-wrap">
     <table id="db-table">
-      <thead><tr><th>Product</th><th>Open</th><th>Add</th><th>Avail</th><th>Close</th><th>Sold</th><th>Buy</th><th>Sell</th><th>Sales</th><th>Profit</th></tr></thead>
+      <thead><tr><th>Product</th><th>Opening</th><th>Received</th><th>Available</th><th>Closing</th><th>Sold</th><th>Sell Price</th><th>Expected Sales</th></tr></thead>
       <tbody></tbody>
     </table>
   </div>
   <div class="totals" id="db-totals"></div>
+  <button class="btn" id="save-closing-btn" onclick="saveClosingStock()" style="margin-top:10px;">SAVE CLOSING STOCK</button>
 </div>
 
 <div class="view" id="v-expenses">
@@ -215,18 +224,18 @@ table th,table td{padding:8px 6px;border-bottom:1px solid var(--border);text-ali
 </div>
 
 <div class="view" id="v-till">
-  <h2 class="section">Till / Cash Reconciliation — Today</h2>
+  <h2 class="section">Daily Closing & Till Check</h2>
   <div class="card" id="till-summary"></div>
-  <label class="f">Actual Cash Counted</label>
-  <input id="till-actual" type="number" placeholder="0">
-  <button class="btn" onclick="calcTill()">Calculate Difference</button>
+  <h2 class="section">Money Count</h2>
+  <label class="f">Cash physically in till</label>
+  <input id="till-actual" type="number" inputmode="decimal" placeholder="0">
+  <label class="f">M-Pesa received today</label>
+  <input id="till-mpesa" type="number" inputmode="decimal" placeholder="0">
+  <label class="f">Other electronic/non-cash received</label>
+  <input id="till-other" type="number" inputmode="decimal" placeholder="0">
+  <button class="btn" onclick="calcTill()">CHECK CLOSING</button>
   <div class="card" id="till-result" style="margin-top:10px;"></div>
-  <h2 class="section">Close Business Day</h2>
-  <button class="btn danger" onclick="closeDay()" id="close-day-btn">CLOSE DAY</button>
-  <h2 class="section">Open Business Day</h2>
-  <label class="f">Opening Cash</label>
-  <input id="open-cash" type="number" placeholder="0">
-  <button class="btn secondary" onclick="openDay()" id="open-day-btn">OPEN TODAY'S BUSINESS DAY</button>
+  <div class="hint" style="margin-top:10px;">First save the physical closing stock in the Closing Stock tab. This calculation then compares the value of goods sold with the money accounted for, after cash expenses.</div>
 </div>
 
 <div class="view" id="v-history">
@@ -283,22 +292,33 @@ let me = null;         // profiles row for logged-in user
 let products = [];
 let cart = [];
 let payMethod = 'Cash';
-let todayBusinessDay = null; // business_days row for today, or null if not open
+let todayBusinessDay = null; // retained for compatibility; no manual business-day workflow
 let catFilter = 'All';
 
 function money(n){ return 'KSh ' + Math.round(n||0).toLocaleString(); }
-function todayStr(){ return new Date().toISOString().slice(0,10); }
+function todayStr(){
+  return new Intl.DateTimeFormat('en-CA',{
+    timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit'
+  }).format(new Date());
+}
+function previousDate(date){
+  const d=new Date(date+'T00:00:00+03:00');
+  d.setDate(d.getDate()-1);
+  return new Intl.DateTimeFormat('en-CA',{
+    timeZone:'Africa/Nairobi',year:'numeric',month:'2-digit',day:'2-digit'
+  }).format(d);
+}
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',2500); }
 function uid6(){ return Date.now().toString().slice(-6); }
 
 const NAV_OWNER = [
   ['dash','Dashboard'],['pos','POS'],['products','Products'],['inventory','Inventory'],
-  ['receive','Receive'],['dailybook','Daily Book'],['expenses','Expenses'],['till','Till'],
+  ['receive','Receive'],['dailybook','Closing Stock'],['expenses','Expenses'],['till','Till'],
   ['history','History'],['reports','Reports'],['settings','Settings']
 ];
 const NAV_CASHIER = [
   ['dash','Dashboard'],['pos','POS'],['products','Products'],['inventory','Inventory'],
-  ['expenses','Expenses'],['till','Till'],['history','History']
+  ['dailybook','Closing Stock'],['expenses','Expenses'],['till','Till'],['history','History']
 ];
 
 // =====================================================================
@@ -367,8 +387,6 @@ async function afterLogin(){
   document.getElementById('hdr-name').textContent=(me.name||user.email)+' · '+me.role;
   buildNav();
   document.getElementById('add-product-btn').style.display=me.role==='owner'?'block':'none';
-  document.getElementById('close-day-btn').style.display=me.role==='owner'?'block':'none';
-  document.getElementById('open-day-btn').style.display=me.role==='owner'?'block':'none';
   await loadProducts();
   await checkBusinessDay();
   await renderDashboard();
@@ -392,43 +410,16 @@ if(sb){
 }
 
 // =====================================================================
-// BUSINESS DAY
+// DAILY DATE — NO MANUAL BUSINESS-DAY OPEN/CLOSE
 // =====================================================================
 async function checkBusinessDay(){
-  const { data } = await sb.from('business_days').select('*').eq('business_date', todayStr()).maybeSingle();
-  todayBusinessDay = data || null;
   const banner = document.getElementById('day-status-banner');
-  const guard = document.getElementById('pos-day-guard');
-  const posBody = document.getElementById('pos-body');
-  if(todayBusinessDay && todayBusinessDay.status==='open'){
-    banner.innerHTML = `<strong>Business Day: OPEN</strong> <span class="badge badge-open">since ${new Date(todayBusinessDay.opened_at).toLocaleTimeString()}</span>`;
-    guard.innerHTML = '';
-    posBody.style.display='block';
-  } else {
-    banner.innerHTML = `<strong>Business Day: CLOSED</strong> <span class="badge badge-closed">not opened yet</span><div class="hint">Ask the owner to open today's business day from the Till tab before selling.</div>`;
-    guard.innerHTML = `<div class="card">Today's business day is not open yet. ${me.role==='owner' ? 'Go to the Till tab to open it.' : 'Ask the owner to open it.'}</div>`;
-    posBody.style.display='none';
+  if(banner){
+    banner.innerHTML = `<strong>Today: ${todayStr()}</strong><div class="hint">Daily figures reset automatically at midnight (Africa/Nairobi). Previous records remain available in history and reports.</div>`;
   }
+  const posBody=document.getElementById('pos-body');
+  if(posBody) posBody.style.display='block';
 }
-async function openDay(){
-  const cash = parseFloat(document.getElementById('open-cash').value)||0;
-  const { error } = await sb.rpc('open_business_day', { p_business_date: todayStr(), p_opening_cash: cash, p_user_id: await currentUserId() });
-  if(error){ toast(error.message); return; }
-  toast('Business day opened');
-  await checkBusinessDay();
-  renderTill();
-}
-async function closeDay(){
-  const actual = parseFloat(document.getElementById('till-actual').value);
-  if(isNaN(actual)){ toast('Enter actual cash counted first'); return; }
-  if(!confirm('Close today\'s business day? This cannot be undone easily.')) return;
-  const { error } = await sb.rpc('close_business_day', { p_business_date: todayStr(), p_actual_cash: actual, p_user_id: await currentUserId() });
-  if(error){ toast(error.message); return; }
-  toast('Business day closed');
-  await checkBusinessDay();
-  renderDashboard();
-}
-
 // =====================================================================
 // PRODUCTS
 // =====================================================================
@@ -625,33 +616,141 @@ async function loadReceiveHistory(){
 }
 
 // =====================================================================
-// DAILY SALES BOOK
+// CLOSING STOCK
 // =====================================================================
 document.getElementById('db-date').onchange = renderDailyBook;
-async function renderDailyBook(){
-  const date = document.getElementById('db-date').value || todayStr();
-  const { data:snapshots } = await sb.from('daily_stock_snapshot').select('*, products(name, buying_price, selling_price)').eq('business_date', date);
-  const { data:items } = await sb.from('sale_items').select('*, sales!inner(business_date, status)').eq('sales.business_date', date).eq('sales.status','completed');
-  const soldByProduct = {};
-  (items||[]).forEach(i=>{ soldByProduct[i.product_id] = (soldByProduct[i.product_id]||0) + Number(i.quantity); });
-  let totalSold=0, totalSales=0, totalCogs=0, totalProfit=0;
-  const rows = (snapshots||[]).map(s=>{
-    const sold = soldByProduct[s.product_id]||0;
-    const available = Number(s.opening_stock)+Number(s.added_stock);
-    const closing = s.closing_stock!=null ? s.closing_stock : (available - sold);
-    const buy = s.products.buying_price, sell = s.products.selling_price;
-    const salesAmt = sold*sell, cogs = sold*buy, profit = sold*(sell-buy);
-    totalSold+=sold; totalSales+=salesAmt; totalCogs+=cogs; totalProfit+=profit;
-    return `<tr><td>${s.products.name}</td><td>${s.opening_stock}</td><td>${s.added_stock}</td><td>${available}</td><td>${closing}</td><td>${sold}</td><td>${buy}</td><td>${sell}</td><td>${money(salesAmt)}</td><td>${money(profit)}</td></tr>`;
-  }).join('');
-  document.querySelector('#db-table tbody').innerHTML = rows || '<tr><td colspan="10">No snapshot for this date (business day not opened).</td></tr>';
-  document.getElementById('db-totals').innerHTML = `
-    <div class="row"><span>Total Units Sold</span><span>${totalSold}</span></div>
-    <div class="row"><span>Total Sales</span><span>${money(totalSales)}</span></div>
-    <div class="row"><span>Total COGS</span><span>${money(totalCogs)}</span></div>
-    <div class="row big"><span>Gross Profit</span><span>${money(totalProfit)}</span></div>`;
+
+async function getClosingRows(date){
+  const {data:snapshots,error:snapError}=await sb.from('daily_stock_snapshot')
+    .select('*, products(name,buying_price,selling_price,active,current_stock)')
+    .eq('business_date',date);
+  if(snapError){ toast('Closing stock lookup failed: '+snapError.message); return []; }
+
+  const {data:received}=await sb.from('product_costs')
+    .select('product_id,quantity_received')
+    .eq('effective_date',date);
+  const receivedByProduct={};
+  (received||[]).forEach(r=>receivedByProduct[r.product_id]=(receivedByProduct[r.product_id]||0)+Number(r.quantity_received||0));
+
+  const rows=(snapshots||[]).map(s=>({
+    ...s,
+    added_stock:Number(receivedByProduct[s.product_id]||0),
+    opening_stock:Number(s.opening_stock||0),
+    closing_stock:s.closing_stock==null?'':Number(s.closing_stock),
+    sell:Number(s.products?.selling_price||0),
+    buy:Number(s.products?.buying_price||0),
+    name:s.products?.name||'Unknown'
+  }));
+  return rows;
 }
 
+async function ensureTodaySnapshots(){
+  const date=todayStr();
+  const {data:existing}=await sb.from('daily_stock_snapshot').select('product_id,opening_stock,added_stock,closing_stock').eq('business_date',date);
+  const existingIds=new Set((existing||[]).map(x=>x.product_id));
+  const {data:yesterday}=await sb.from('daily_stock_snapshot').select('product_id,closing_stock').eq('business_date',previousDate(date));
+  const yesterdayMap={}; (yesterday||[]).forEach(x=>yesterdayMap[x.product_id]=x.closing_stock);
+  const {data:received}=await sb.from('product_costs').select('product_id,quantity_received').eq('effective_date',date);
+  const receivedMap={}; (received||[]).forEach(r=>receivedMap[r.product_id]=(receivedMap[r.product_id]||0)+Number(r.quantity_received||0));
+
+  const missing=products.filter(p=>p.active && !existingIds.has(p.id)).map(p=>({
+    business_date:date,
+    product_id:p.id,
+    opening_stock:yesterdayMap[p.id]!=null?Number(yesterdayMap[p.id]):Number(p.current_stock||0),
+    added_stock:Number(receivedMap[p.id]||0),
+    closing_stock:null
+  }));
+  if(missing.length){
+    const {error}=await sb.from('daily_stock_snapshot').insert(missing);
+    if(error) toast('Could not initialize closing stock: '+error.message);
+  }
+}
+
+async function renderDailyBook(){
+  const date=document.getElementById('db-date').value||todayStr();
+  if(date===todayStr()) await ensureTodaySnapshots();
+
+  const rows=await getClosingRows(date);
+  let totalSold=0,totalExpected=0,totalCogs=0,totalProfit=0;
+  const html=rows.map(r=>{
+    const available=r.opening_stock+r.added_stock;
+    const closing=r.closing_stock==='' ? '' : r.closing_stock;
+    const sold=closing==='' ? 0 : Math.max(0,available-closing);
+    const sales=sold*r.sell, cogs=sold*r.buy, profit=sales-cogs;
+    totalSold+=sold; totalExpected+=sales; totalCogs+=cogs; totalProfit+=profit;
+    return `<tr>
+      <td>${r.name}</td><td>${r.opening_stock}</td><td>${r.added_stock}</td><td>${available}</td>
+      <td><input class="close-stock-input" data-product="${r.product_id}" type="number" min="0" step="1" value="${closing}" placeholder="Qty"></td>
+      <td>${sold}</td><td>${money(r.sell)}</td><td>${money(sales)}</td>
+    </tr>`;
+  }).join('');
+  document.querySelector('#db-table tbody').innerHTML=html||'<tr><td colspan="8">No products found.</td></tr>';
+  document.getElementById('db-totals').innerHTML=`
+    <div class="row"><span>Goods Sold</span><span>${totalSold} units</span></div>
+    <div class="row"><span>Expected Sales from Stock</span><span>${money(totalExpected)}</span></div>
+    <div class="row"><span>COGS</span><span>${money(totalCogs)}</span></div>
+    <div class="row big"><span>Estimated Gross Profit</span><span>${money(totalProfit)}</span></div>`;
+  document.querySelectorAll('.close-stock-input').forEach(i=>i.oninput=updateClosingPreview);
+  document.getElementById('save-closing-btn').style.display=(me.role==='cashier'||me.role==='owner')?'block':'none';
+}
+
+function updateClosingPreview(){
+  let sold=0,sales=0;
+  document.querySelectorAll('#db-table tbody tr').forEach(tr=>{
+    const cells=tr.children; if(!cells.length) return;
+    const available=Number(cells[3].textContent)||0;
+    const sellText=cells[6].textContent.replace(/[^0-9.-]/g,'');
+    const sell=Number(sellText)||0;
+    const input=tr.querySelector('.close-stock-input');
+    const closing=input && input.value!=='' ? Number(input.value) : null;
+    const s=closing==null?0:Math.max(0,available-closing);
+    cells[5].textContent=s;
+    cells[7].textContent=money(s*sell);
+    sold+=s; sales+=s*sell;
+  });
+  const t=document.getElementById('db-totals');
+  if(t){
+    const rows=t.querySelectorAll('.row');
+    if(rows[0]) rows[0].querySelector('span:last-child').textContent=sold+' units';
+    if(rows[1]) rows[1].querySelector('span:last-child').textContent=money(sales);
+  }
+}
+
+async function saveClosingStock(){
+  const date=document.getElementById('db-date').value||todayStr();
+  if(date!==todayStr() && me.role!=='owner'){ toast('Cashier can only submit today\'s closing stock.'); return; }
+  const inputs=[...document.querySelectorAll('.close-stock-input')];
+  if(!inputs.length){ toast('No products to close.'); return; }
+  const values=[];
+  for(const input of inputs){
+    if(input.value===''){ toast('Enter closing stock for every product.'); input.focus(); return; }
+    const qty=Number(input.value);
+    if(!Number.isFinite(qty)||qty<0){ toast('Closing stock must be zero or more.'); input.focus(); return; }
+    values.push({productId:input.dataset.product,closing:qty});
+  }
+
+  const {data:snapshots,error:snapError}=await sb.from('daily_stock_snapshot')
+    .select('product_id,opening_stock,added_stock')
+    .eq('business_date',date);
+  if(snapError){ toast('Could not read stock opening data: '+snapError.message); return; }
+  const map={}; (snapshots||[]).forEach(s=>map[s.product_id]=s);
+
+  for(const v of values){
+    const s=map[v.productId];
+    if(!s) { toast('Missing stock snapshot for one or more products.'); return; }
+    const {error}=await sb.from('daily_stock_snapshot')
+      .update({closing_stock:v.closing}).eq('business_date',date).eq('product_id',v.productId);
+    if(error){ toast('Could not save '+(products.find(p=>p.id===v.productId)?.name||'stock')+': '+error.message); return; }
+    // Keep current inventory aligned with the physical count.
+    const {error:stockError}=await sb.from('products').update({current_stock:v.closing}).eq('id',v.productId);
+    if(stockError){ toast('Closing stock saved, but inventory update failed: '+stockError.message); return; }
+  }
+
+  toast('Closing stock saved. Now check the Till.');
+  await loadProducts();
+  await renderDailyBook();
+  await renderTill();
+}
 // =====================================================================
 // EXPENSES
 // =====================================================================
@@ -674,38 +773,59 @@ async function renderExpenses(){
 }
 
 // =====================================================================
-// TILL / RECONCILIATION
+// DAILY TILL CHECK
 // =====================================================================
 async function renderTill(){
-  const date = todayStr();
-  const { data:sales } = await sb.from('sales').select('total,payment_method').eq('business_date',date).eq('status','completed');
-  const { data:expenses } = await sb.from('expenses').select('amount').eq('business_date',date);
-  const cashSales = (sales||[]).filter(s=>s.payment_method==='Cash').reduce((a,s)=>a+Number(s.total),0);
-  const mpesaSales = (sales||[]).filter(s=>s.payment_method==='M-Pesa').reduce((a,s)=>a+Number(s.total),0);
-  const otherSales = (sales||[]).filter(s=>s.payment_method==='Other').reduce((a,s)=>a+Number(s.total),0);
-  const totalExpenses = (expenses||[]).reduce((a,e)=>a+Number(e.amount),0);
-  const openingCash = todayBusinessDay ? Number(todayBusinessDay.opening_cash) : 0;
-  const expected = openingCash + cashSales - totalExpenses;
-  window._till = { openingCash, cashSales, mpesaSales, otherSales, totalExpenses, expected };
-  document.getElementById('till-summary').innerHTML = `
-    <div class="list-row"><span>Opening Cash</span><span>${money(openingCash)}</span></div>
-    <div class="list-row"><span>Cash Sales</span><span>${money(cashSales)}</span></div>
-    <div class="list-row"><span>M-Pesa Sales</span><span>${money(mpesaSales)}</span></div>
-    <div class="list-row"><span>Other Sales</span><span>${money(otherSales)}</span></div>
-    <div class="list-row"><span>Expenses</span><span>-${money(totalExpenses)}</span></div>
-    <div class="list-row"><strong>Expected Cash</strong><strong>${money(expected)}</strong></div>`;
-}
-function calcTill(){
-  const actual = parseFloat(document.getElementById('till-actual').value);
-  if(isNaN(actual)){ toast('Enter actual cash counted'); return; }
-  const diff = actual - window._till.expected;
-  const status = diff>0?'SURPLUS':diff<0?'SHORTAGE':'BALANCED';
-  document.getElementById('till-result').innerHTML = `
-    <div class="list-row"><span>Actual Cash</span><span>${money(actual)}</span></div>
-    <div class="list-row"><span>Difference</span><span style="color:${diff<0?'var(--bad)':'var(--accent)'}">${diff>=0?'+':''}${money(diff)}</span></div>
-    <div class="list-row"><strong>${status}</strong></div>`;
+  const date=todayStr();
+  const rows=await getClosingRows(date);
+  const {data:sales}=await sb.from('sales').select('total,payment_method').eq('business_date',date).eq('status','completed');
+  const {data:expenses}=await sb.from('expenses').select('amount,category').eq('business_date',date);
+
+  let expectedSales=0;
+  rows.forEach(r=>{
+    if(r.closing_stock==='') return;
+    const available=r.opening_stock+r.added_stock;
+    const sold=Math.max(0,available-r.closing_stock);
+    expectedSales += sold*r.sell;
+  });
+  const receiptSales=(sales||[]).reduce((a,s)=>a+Number(s.total||0),0);
+  const receiptCash=(sales||[]).filter(s=>s.payment_method==='Cash').reduce((a,s)=>a+Number(s.total||0),0);
+  const receiptMpesa=(sales||[]).filter(s=>s.payment_method==='M-Pesa').reduce((a,s)=>a+Number(s.total||0),0);
+  const receiptOther=(sales||[]).filter(s=>s.payment_method==='Other').reduce((a,s)=>a+Number(s.total||0),0);
+  const cashExpenses=(expenses||[]).reduce((a,e)=>a+Number(e.amount||0),0);
+
+  window._till={expectedSales,receiptSales,receiptCash,receiptMpesa,receiptOther,cashExpenses};
+  document.getElementById('till-summary').innerHTML=`
+    <div class="list-row"><span>Expected sales from closing stock</span><strong>${money(expectedSales)}</strong></div>
+    <div class="list-row"><span>Receipt sales included</span><span>${money(receiptSales)}</span></div>
+    <div class="list-row"><span>Cash expenses</span><span>-${money(cashExpenses)}</span></div>
+    <div class="hint" style="margin-top:8px;">Receipt sales are already included in goods sold, so they are not added a second time.</div>`;
 }
 
+function calcTill(){
+  if(!window._till){ toast('Open Till again to load today\'s figures.'); return; }
+  const actualCash=Number(document.getElementById('till-actual').value);
+  const mpesa=Number(document.getElementById('till-mpesa').value)||0;
+  const other=Number(document.getElementById('till-other').value)||0;
+  if(!Number.isFinite(actualCash)||actualCash<0){ toast('Enter the actual cash in the till.'); return; }
+
+  const t=window._till;
+  const expectedCash=Math.max(0,t.expectedSales-mpesa-other-t.cashExpenses);
+  const accounted=actualCash+mpesa+other+t.cashExpenses;
+  const difference=accounted-t.expectedSales;
+  const status=difference>0?'EXCESS':difference<0?'SHORTAGE':'BALANCED';
+  const colour=difference<0?'var(--bad)':difference>0?'var(--warn)':'var(--accent)';
+
+  document.getElementById('till-result').innerHTML=`
+    <div class="list-row"><span>Expected sales</span><strong>${money(t.expectedSales)}</strong></div>
+    <div class="list-row"><span>Expected cash in till</span><strong>${money(expectedCash)}</strong></div>
+    <div class="list-row"><span>Actual cash in till</span><strong>${money(actualCash)}</strong></div>
+    <div class="list-row"><span>M-Pesa reported</span><span>${money(mpesa)}</span></div>
+    <div class="list-row"><span>Other reported</span><span>${money(other)}</span></div>
+    <div class="list-row"><span>Cash expenses</span><span>-${money(t.cashExpenses)}</span></div>
+    <div class="list-row"><strong>Difference</strong><strong style="color:${colour}">${difference>=0?'+':''}${money(difference)}</strong></div>
+    <div class="card" style="margin-top:10px;text-align:center;font-size:20px;font-weight:800;color:${colour};">${status}</div>`;
+}
 // =====================================================================
 // SALES HISTORY
 // =====================================================================
